@@ -5,5 +5,7 @@ export const getAllProperties = <T>(obj: T) => {
     if (!prototype || (typeof obj === 'function' && !obj.name)) return []
     const props = Object.getOwnPropertyNames(obj) as (keyof T)[]
     const parentProps = getAllProperties(prototype) as (keyof T)[]
-    return Array.from(new Set<keyof T>([...props, ...parentProps]))
+    const { constructor } = obj as any
+    const staticProps = constructor?.name ? Object.getOwnPropertyNames(constructor) as (keyof T)[] : []
+    return Array.from(new Set<keyof T>([...props, ...parentProps, ...staticProps]))
 }
