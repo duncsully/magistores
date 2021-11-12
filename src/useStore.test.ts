@@ -27,6 +27,26 @@ describe('useStore', () => {
         expect(resultOne.current.test).toBe(3)
     })
 
+    it('can be used with a store that has state property', () => {
+        const testStore = {
+            state: {
+                test: 1
+            },
+            setTest(test: number) {
+                this.state = {...this.state, test}
+            }
+        }
+
+        const { result: resultOne } = renderHook(() => useStore(testStore))
+        const { result: resultTwo } = renderHook(() => useStore(testStore))
+
+        act(() => {
+            resultOne.current.setTest(2)
+        })
+
+        expect(resultTwo.current.state.test).toBe(2)
+    })
+
     it('can be used with stores using outside variables', () => {
         let test = 1
         const testStore = {
