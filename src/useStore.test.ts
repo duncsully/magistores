@@ -29,11 +29,11 @@ describe('useStore', () => {
 
     it('can be used with a store that has state property', () => {
         const testStore = {
-            state: {
+            state: Object.freeze({
                 test: 1
-            },
+            }),
             setTest(test: number) {
-                this.state = {...this.state, test}
+                this.state = Object.freeze({...this.state, test})
             }
         }
 
