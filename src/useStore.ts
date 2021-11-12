@@ -2,7 +2,6 @@ import React, { useEffect, useReducer, useState } from "react"
 import { getAllProperties } from "./utils"
 
 // TODO: Use a createStore function that transforms a store? All method behavior inside that?
-// TODO: Tests
 type Updater = React.DispatchWithoutAction
 
 /** A simple map of properties and all updaters subscribed to that property */
@@ -27,7 +26,8 @@ export const useStore = <T>(store: T) => {
     // Proxy for store
     const [proxy] = useState(() => 
         new Proxy<any>(store, {
-            get: (obj, prop) => {
+            get: (obj, key) => {
+                const prop = key as keyof T
                 let value = obj[prop]
                 const allProps = getAllProperties(obj)
                 if (allProps.includes(prop)) {
@@ -35,22 +35,22 @@ export const useStore = <T>(store: T) => {
                     if (value instanceof Function) {
                         // Wrap method
                         return (...args: any[]) => {
-                            // Get current entries before calling original method
-                            const currentValues = Array.from(allProps).map(prop => obj[prop])
+                            // Get current values before calling original method
+                            const currentValues = allProps.map(prop => obj[prop])
                             // Do the call as requested (and make sure it's bound to object)
                             value.call(obj, ...args)
-                            // Get the new values (-should- be in same order, fix if this ever changes)
+                            // Get the new values 
                             const newValues = allProps.map(prop => obj[prop])
                             // To not call the same updater more than once, consolidate all updaters as we get them
                             let toUpdate = new Set<Updater>()
 
                             // Check every entry
-                            allProps.forEach((key, i) => {
+                            allProps.forEach((checkProp, i) => {
                                 const currentValue = currentValues[i]
                                 const newValue = newValues[i]
-                                // If a value changed, throw any subscriptions for that property into the update bucket
+                                // If a value changed (shallow comparison), throw any subscriptions for that property into the update bucket
                                 if (currentValue !== newValue) {
-                                    const subscriptions = propertySubscriptions[key as keyof T] ?? []
+                                    const subscriptions = propertySubscriptions[checkProp as keyof T] ?? []
                                     toUpdate = new Set([...toUpdate, ...subscriptions])
                                 }
                             })
@@ -59,8 +59,8 @@ export const useStore = <T>(store: T) => {
                         } 
                     // Put primitive properties that are read into the subscription watch list
                     } else {
-                        const subscriptions = propertySubscriptions[prop as keyof T] ?? new Set()
-                        propertySubscriptions[prop as keyof T] = subscriptions
+                        const subscriptions = propertySubscriptions[prop] ?? new Set()
+                        propertySubscriptions[prop] = subscriptions
                         subscriptions.add(updater)
                     }
                 }
@@ -68,12 +68,11 @@ export const useStore = <T>(store: T) => {
                 return value
             },
             // Alerts subscriptions for this property
-            set: (obj, prop, value) => {
+            set: (obj, prop, newValue) => {
                 const currentValue = obj[prop]
-                obj[prop] = value
-                // TODO: Check for native or class property?
+                obj[prop] = newValue
                 // Don't trigger rerenders if the value didn't change (shallow comparison)
-                if (currentValue !== value) {
+                if (currentValue !== newValue) {
                     const subscriptions = propertySubscriptions[prop as keyof T]
                     // Not every property is going to be read for sure, so it might not have any subscriptions
                     subscriptions?.forEach(updater => updater())
