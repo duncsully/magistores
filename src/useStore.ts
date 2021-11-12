@@ -1,14 +1,16 @@
 import React, { useEffect, useReducer, useState } from "react"
+import { getAllProperties } from "./utils"
 
-// TODO: Wrap methods to get current state, make action, and see what state changed, then push updates? Would let objects that reference outside variables and their getters work. Need to not trash with state setter-based updates. Rebind to object?
-// TODO: Figure out how to let class instances work with private fields and getters. Would ^ fix it?
+// TODO: Use a createStore function that transforms a store? All method behavior inside that?
+// TODO: Tests
 type Updater = React.DispatchWithoutAction
+
+/** A simple map of properties and all updaters subscribed to that property */
+type PropertySubscriptions<T> = Record<keyof T, Set<Updater>>
 
 /** A WeakMap associating stores to their subscriptions. */ 
 const storeToSubscriptionsMap = new WeakMap<any, PropertySubscriptions<any>>()
 
-/** A simple map of properties and all updaters subscribed to that property */
-type PropertySubscriptions<T> = Record<keyof T, Set<Updater>>
 
 /** A hook for subscribing to simple stores. Any changes to properties used by a component (and only used properties) will rerender the component
  * @param store - An object with which to watch for property changes to rerender
@@ -23,19 +25,40 @@ export const useStore = <T>(store: T) => {
     const [, updater] = useReducer(x => x + 1, 0)
 
     // Proxy for store
-    const [proxy] = useState(() => {
-        let addSubscribers = true
-        return new Proxy(store as any, {
-            // Binds methods to proxy (so "this" values route through proxy) and adds updater to property subscriptions
+    const [proxy] = useState(() => 
+        new Proxy<any>(store, {
             get: (obj, prop) => {
                 let value = obj[prop]
-                // Only check native properties
-                if (obj.hasOwnProperty(prop)) {
-                    // Make sure methods go through proxy for "this" values
+                const allProps = getAllProperties(obj)
+                if (allProps.includes(prop)) {
+                    // Methods
                     if (value instanceof Function) {
-                        value = value.bind(proxy)
+                        // Wrap method
+                        return (...args: any[]) => {
+                            // Get current entries before calling original method
+                            const currentValues = Array.from(allProps).map(prop => obj[prop])
+                            // Do the call as requested (and make sure it's bound to object)
+                            value.call(obj, ...args)
+                            // Get the new values (-should- be in same order, fix if this ever changes)
+                            const newValues = allProps.map(prop => obj[prop])
+                            // To not call the same updater more than once, consolidate all updaters as we get them
+                            let toUpdate = new Set<Updater>()
+
+                            // Check every entry
+                            allProps.forEach((key, i) => {
+                                const currentValue = currentValues[i]
+                                const newValue = newValues[i]
+                                // If a value changed, throw any subscriptions for that property into the update bucket
+                                if (currentValue !== newValue) {
+                                    const subscriptions = propertySubscriptions[key as keyof T] ?? []
+                                    toUpdate = new Set([...toUpdate, ...subscriptions])
+                                }
+                            })
+                            // Go through all of the updaters that were subscribed to at least one of the changed properties
+                            toUpdate.forEach(updater => updater())
+                        } 
                     // Put primitive properties that are read into the subscription watch list
-                    } else if (addSubscribers) {
+                    } else {
                         const subscriptions = propertySubscriptions[prop as keyof T] ?? new Set()
                         propertySubscriptions[prop as keyof T] = subscriptions
                         subscriptions.add(updater)
@@ -48,15 +71,17 @@ export const useStore = <T>(store: T) => {
             set: (obj, prop, value) => {
                 const currentValue = obj[prop]
                 obj[prop] = value
+                // TODO: Check for native or class property?
                 // Don't trigger rerenders if the value didn't change (shallow comparison)
                 if (currentValue !== value) {
                     const subscriptions = propertySubscriptions[prop as keyof T]
-                    subscriptions.forEach(updater => updater())
+                    // Not every property is going to be read for sure, so it might not have any subscriptions
+                    subscriptions?.forEach(updater => updater())
                 }
                 return true
             }
         })
-    })
+    )
 
     // Unsubscribe on dismount
     useEffect(() => () => { Object.values<Set<Updater>>(propertySubscriptions).forEach(subscriptions => subscriptions.delete(updater)) }
@@ -95,16 +120,16 @@ export const stateAndActions = {
   let _thing = 'Cool';
   export const gettersAndMethodsStore = {
     get test() {
-      return _test
+        return _test
     },
     get thing() {
-      return _thing
+        return _thing
     },
     set thing(thing: string) {
         _thing = thing
     },
     setTest(test: string) {
-      _test = test
+        _test = test
     },
     setThing(thing: string) {
         _thing = thing
@@ -122,14 +147,25 @@ export const stateAndActions = {
         this.#thing = thing
     }
   
-    setTest(test: string) {
+    setTest = (test: string) => {
         this.#test = test
     }
-    setThing(thing: string) {
-      this.#thing = thing
+    setThing = (thing: string) => {
+        this.#thing = thing
     }
   
     #test = "Classy"
     #thing = 'Sassy'
   }
   export const classStore = new ClassStore();
+
+  export class StaticStore {
+      static test = 'Static'
+      static thing = 'Shock'
+      static setTest = (newTest: string) => {
+          StaticStore.test = newTest
+      }
+      static setThing = (newThing: string) => {
+          StaticStore.thing = newThing
+      }
+  }

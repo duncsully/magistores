@@ -1,8 +1,8 @@
 import React from 'react'
-import { useStore, testStore } from './useStore'
+import { useStore, testStore, gettersAndMethodsStore, classStore, StaticStore } from './useStore'
 
 export const OtherComp = () => {
-    const store = useStore(testStore)
+    const store = useStore(StaticStore)
 
     return <div>
         <p>Is this synced? {store.test}</p>
