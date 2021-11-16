@@ -64,7 +64,7 @@ const makeUpdatingChange = <T>(store: T, change: () => any, allUpdaters?: Update
  * @param updater - A function to call whenever a property read by the proxied store changes
  * @param [parent] - This store or function's parent store, so that it can update its parent
  */
-export const getProxyInstance = <T extends {} | Function>(store: T, updater: Updater, parent?: any, root: any = store): readonly [T, (updater: Updater) => void] => {
+export const getProxyInstance = <T extends {} | Function>(store: T, updater: Updater, parent?: any): readonly [T, (updater: Updater) => void] => {
     const storeSubscriptions: StoreSubscriptions<T> = storeToSubscriptionsMap.get(store) ?? { propertySubscriptions: {} as PropertySubscriptions<T>, parent }
     storeToSubscriptionsMap.set(store, storeSubscriptions);
 
@@ -79,7 +79,7 @@ export const getProxyInstance = <T extends {} | Function>(store: T, updater: Upd
             // - Objects: Basically turn into sub-stores, so that their nested values can also be watched
             // - Functions: Go through the apply trap so values can be compared after calling
             if (value instanceof Object) {
-                const [nestedProxy] = getProxyInstance(value, updater, obj, root);
+                const [nestedProxy] = getProxyInstance(value, updater, obj);
                 value = nestedProxy;
             }
 
