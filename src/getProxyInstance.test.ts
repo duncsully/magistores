@@ -62,6 +62,34 @@ describe('getProxyInstance', () => {
         expect(updaterTwo).toHaveBeenCalled()
     })
 
+    it('updates parent stores when child stores updated', () => {
+        const testStore = {
+            state: {
+                test: {
+                    thing: 1
+                },
+                get thing() {
+                    return this.test.thing
+                }
+            },
+            get thing() {
+                return this.state.thing
+            }
+        }
+
+        const updaterOne = jest.fn()
+        const [instanceOne] = getProxyInstance(testStore, updaterOne)
+
+        const updaterTwo = jest.fn()
+        const [instanceTwo] = getProxyInstance(testStore, updaterTwo)
+
+        read(instanceTwo.thing)
+
+        instanceOne.state.test.thing = 2
+
+        expect(updaterTwo).toHaveBeenCalled()
+    })
+
     it('works with stores accessing outside variables', () => {
         let test = 1
         const testStore = {
@@ -132,7 +160,7 @@ describe('getProxyInstance', () => {
         expect(updaterTwo).toHaveBeenCalled()
     })
 
-    it.skip('works with static values when passing the class', () => {
+    it('works with static values when passing the class', () => {
         class BaseStore {
             static test = 1
         }
