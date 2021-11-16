@@ -1,61 +1,66 @@
-// TODO: Support when parent changes child properties?
-/* e.g.
-{
-    state: {
-        value: 1
-    }
-    setValue(value: number) {
-        this.state.value = value
-    }
-}
-*/
-
 type Updater = () => any;
 
-interface StoreSubscriptions<T> {
+interface StoreMetadata<T> {
     parent?: any,
+    children?: Set<any>
     propertySubscriptions: PropertySubscriptions<T>
 }
 
 /** A simple map of properties and all updaters subscribed to that property */
 type PropertySubscriptions<T> = Record<keyof T, Set<Updater>>;
 
-/** A WeakMap associating stores to their subscriptions. */
-const storeToSubscriptionsMap = new WeakMap<any, StoreSubscriptions<any>>();
+/** A WeakMap associating stores to their metadata. */
+const storeToMetadataMap = new WeakMap<any, StoreMetadata<any>>();
 
-/** Compares values before and after calling change CB and calls all updaters on subscribers on changed properties */
-const makeUpdatingChange = <T>(store: T, change: () => any, allUpdaters?: Updater[]): any => {
-    const toUpdate = allUpdaters ?? []
-    const storeSubscriptions: StoreSubscriptions<T> = storeToSubscriptionsMap.get(store) ?? { propertySubscriptions: {} }
-    storeToSubscriptionsMap.set(store, storeSubscriptions)
+const getAncestorStores = (store: any): any[] => {
+    return store ? [...getAncestorStores(storeToMetadataMap.get(store)?.parent), store] : []
+}
 
-    const { parent, propertySubscriptions } = storeSubscriptions
-
-    // Get current values before calling original method
-    const currentValues = Object.keys(propertySubscriptions).map(prop => store[prop as keyof T]);
-    // If parent, recurse to get changes to parent's subscriptions, else do the call as requested
-    const returnValue = parent ? makeUpdatingChange(parent, change, toUpdate) : change()
-    // Get the new values
-    const newValues = Object.keys(propertySubscriptions).map(prop => store[prop as keyof T]);
-
-    // Add all updaters from this store's subscriptions to changed properties
-    Object.values<Set<Updater>>(propertySubscriptions).forEach((updaters, i) => {
-        const currentValue = currentValues[i]
-        const newValue = newValues[i]
-        // Shallow compare values, include updaters for this key if values differ
-        if (currentValue !== newValue) {
-            toUpdate.push(...updaters)
-        }
+const getDescendantStores = (store: any) => {
+    const storeMetadata = storeToMetadataMap.get(store)
+    const results: any[] = []
+    storeMetadata?.children?.forEach(childStore => {
+        results.push(childStore, ...getDescendantStores(childStore))
     })
+    return results
+}
 
-    // Original call
-    if (!allUpdaters) {
-        // Consolidate accumulated updaters so they don't get called more than once
-        const allUpdatersSet = new Set(toUpdate)
-        // Call each unique updater
-        allUpdatersSet.forEach(updater => updater())
-    }
+/** A store's values can affect its ancestors, while its methods can affect its descendants, so get all stores in both directions (ignoring "cousins") */
+const getRelatedStores = (store: any) => [...getAncestorStores(store), ...getDescendantStores(store)]
 
+const getSubscribedPropertyValues = (store: any) => {
+    const { propertySubscriptions } = storeToMetadataMap.get(store) ?? { propertySubscriptions: {} }
+    return Object.keys(propertySubscriptions).map(prop => store[prop])
+}
+
+/** Updates all subscriptions to any changed properties after making the passed change */ 
+const makeUpdatingChange = (store: any, change: () => any) => {
+    // Crawl up to root store and then get all descendant stores
+    const storesToCheck = getRelatedStores(store)
+
+    // Get values for comparison before and after change
+    const currentValues = storesToCheck.map(getSubscribedPropertyValues)
+    const returnValue = change()
+    const newValues = storesToCheck.map(getSubscribedPropertyValues)
+
+    const toUpdate: Updater[] = []
+    // Check changed values store by store
+    storesToCheck.forEach((store, i) => {
+        const { propertySubscriptions } = storeToMetadataMap.get(store) ?? { propertySubscriptions: {} }
+        const storeCurrentValues = currentValues[i]
+        const storeNewValues = newValues[i]
+        // Check each property subscription per store
+        Object.values(propertySubscriptions).forEach((updaters, j) => {
+            const currentValue = storeCurrentValues[j]
+            const newValue = storeNewValues[j]
+            // Shallow comparison, add updater if values different 
+            if (currentValue !== newValue) {
+                toUpdate.push(...updaters)
+            }
+        })
+    })
+    // Add to set to make sure each updater is only added once, call each updater
+    new Set(toUpdate).forEach(updater => updater())
     return returnValue
 }
 
@@ -65,10 +70,10 @@ const makeUpdatingChange = <T>(store: T, change: () => any, allUpdaters?: Update
  * @param [parent] - This store or function's parent store, so that it can update its parent
  */
 export const getProxyInstance = <T extends {} | Function>(store: T, updater: Updater, parent?: any): readonly [T, (updater: Updater) => void] => {
-    const storeSubscriptions: StoreSubscriptions<T> = storeToSubscriptionsMap.get(store) ?? { propertySubscriptions: {} as PropertySubscriptions<T>, parent }
-    storeToSubscriptionsMap.set(store, storeSubscriptions);
+    const storeMetadata: StoreMetadata<T> = storeToMetadataMap.get(store) ?? { propertySubscriptions: {} as PropertySubscriptions<T>, parent }
+    storeToMetadataMap.set(store, storeMetadata);
 
-    const { propertySubscriptions } = storeSubscriptions
+    const { propertySubscriptions } = storeMetadata
 
     const proxy = new Proxy<T>(store, {
         get: (obj, key) => {
@@ -79,21 +84,28 @@ export const getProxyInstance = <T extends {} | Function>(store: T, updater: Upd
             // - Objects: Basically turn into sub-stores, so that their nested values can also be watched
             // - Functions: Go through the apply trap so values can be compared after calling
             if (value instanceof Object) {
+                storeMetadata.children ??= new Set()
+                storeMetadata.children.add(value)
                 const [nestedProxy] = getProxyInstance(value, updater, obj);
                 value = nestedProxy;
             }
 
             if (prop !== 'constructor') {
-                // Subscribe this instance to the property
+                // Subscribe this instance to changes to this property
                 const subscriptions = propertySubscriptions[prop] ??= new Set();
                 subscriptions.add(updater);
             }
 
             return value;
         },
-        set: (obj, prop, newValue) => {
+        set: (obj, key, newValue) => {
+            const prop = key as keyof T
+            // Child is getting replaced by a new substore, delete its entry
+            if (newValue instanceof Object) {
+                storeMetadata.children?.delete(obj[prop])
+            }
             makeUpdatingChange(obj, () => {
-                obj[prop as keyof T] = newValue;
+                obj[prop] = newValue;
             });
             return true;
         },

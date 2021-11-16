@@ -62,7 +62,30 @@ describe('getProxyInstance', () => {
         expect(updaterTwo).toHaveBeenCalled()
     })
 
-    it('updates parent stores when child stores updated', () => {
+    it('works when a parent store updates child properties', () => {
+        const testStore = {
+            state: {
+                test: 1
+            },
+            setTest(test: number) {
+                this.state.test = test
+            }
+        }
+
+        const updaterOne = jest.fn()
+        const [instanceOne] = getProxyInstance(testStore, updaterOne)
+
+        const updaterTwo = jest.fn()
+        const [instanceTwo] = getProxyInstance(testStore, updaterTwo)
+
+        read(instanceTwo.state.test)
+
+        instanceOne.setTest(2)
+
+        expect(updaterTwo).toHaveBeenCalled()
+    })
+
+    it('works when parent properties depend on child properties', () => {
         const testStore = {
             state: {
                 test: {
