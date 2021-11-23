@@ -16,7 +16,7 @@ export const useStore = <T extends {}>(store: T) => {
 
   // Unsubscribe on dismount (function train, choo choo!)
   useEffect(
-    () => () => unsubscribe(updater),
+    () => () => unsubscribe(),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   )

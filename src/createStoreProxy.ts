@@ -81,7 +81,7 @@ export const createStoreProxy = <T extends {} | Function>(
   store: T,
   updater: Updater,
   parent?: any
-): readonly [T, (updater: Updater) => void] => {
+): readonly [T, () => void] => {
   const storeMetadata: StoreMetadata<T> = storeToMetadataMap.get(store) ?? {
     propertySubscriptions: {} as PropertySubscriptions<T>,
   }
@@ -132,7 +132,7 @@ export const createStoreProxy = <T extends {} | Function>(
     },
   })
 
-  const unsubscribe = (updater: Updater) => {
+  const unsubscribe = () => {
     Object.values<Set<Updater>>(propertySubscriptions).forEach(
       (subscriptions) => subscriptions.delete(updater)
     )
