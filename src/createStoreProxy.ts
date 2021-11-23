@@ -1,16 +1,17 @@
 type Updater = () => any
 
-interface StoreMetadata<T> {
+export interface StoreMetadata<T> {
   parent?: any
   children?: Set<any>
   propertySubscriptions: PropertySubscriptions<T>
+  localStorageSubscriptions?: Record<string, Set<keyof T>>
 }
 
 /** A simple map of properties and all updaters subscribed to that property */
-type PropertySubscriptions<T> = Record<keyof T, Set<Updater>>
+export type PropertySubscriptions<T> = Record<keyof T, Set<Updater>>
 
-/** A WeakMap associating stores to their metadata. */
-const storeToMetadataMap = new WeakMap<any, StoreMetadata<any>>()
+/** A Map associating stores to their metadata. */
+export const storeToMetadataMap = new Map<any, StoreMetadata<any>>()
 
 const getAncestorStores = (store: any): any[] => {
   return store
@@ -34,9 +35,7 @@ const getRelatedStores = (store: any) => [
 ]
 
 const getSubscribedPropertyValues = (store: any) => {
-  const { propertySubscriptions } = storeToMetadataMap.get(store) ?? {
-    propertySubscriptions: {},
-  }
+  const { propertySubscriptions = {} } = storeToMetadataMap.get(store) ?? {}
   return Object.keys(propertySubscriptions).map((prop) => store[prop])
 }
 
@@ -78,16 +77,16 @@ const makeUpdatingChange = (store: any, change: () => any) => {
  * @param updater - A function to call whenever a property read by the proxied store changes
  * @param [parent] - This store or function's parent store, so that it can update its parent
  */
-export const getProxyInstance = <T extends {} | Function>(
+export const createStoreProxy = <T extends {} | Function>(
   store: T,
   updater: Updater,
   parent?: any
 ): readonly [T, (updater: Updater) => void] => {
   const storeMetadata: StoreMetadata<T> = storeToMetadataMap.get(store) ?? {
     propertySubscriptions: {} as PropertySubscriptions<T>,
-    parent,
   }
   storeToMetadataMap.set(store, storeMetadata)
+  storeMetadata.parent = parent
 
   const { propertySubscriptions } = storeMetadata
 
@@ -102,7 +101,7 @@ export const getProxyInstance = <T extends {} | Function>(
       if (value instanceof Object) {
         storeMetadata.children ??= new Set()
         storeMetadata.children.add(value)
-        const [nestedProxy] = getProxyInstance(value, updater, obj)
+        const [nestedProxy] = createStoreProxy(value, updater, obj)
         value = nestedProxy
       }
 

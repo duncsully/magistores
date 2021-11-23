@@ -1,8 +1,9 @@
 import React from 'react'
-import { useStore, testStore, gettersAndMethodsStore, classStore, StaticStore } from './useStore'
+import { useStore } from './useStore'
+import { classStore } from "./exampleStores"
 
 export const TestComp = () => {
-    const { test, setTest, setThing } = useStore(StaticStore)
+    const { test, setTest, setThing } = useStore(classStore)
     return <div>
         <p>{test}</p>
         <input value={test} onChange={e => setTest(e.target.value)}/>
