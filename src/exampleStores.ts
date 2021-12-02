@@ -1,5 +1,3 @@
-import { localStorageValue } from './localStorageValue'
-
 export const testStore = {
   test: 'dude',
   thing: 'great',
@@ -50,17 +48,22 @@ class ClassStore {
     return this.#test
   }
 
-  @localStorageValue('thing', 'Sassy')
-  thing!: string
+  get thing() {
+    return this.#thing
+  }
+  set thing(newThing: string) {
+    this.#thing = newThing
+  }
 
   setTest = (test: string) => {
     this.#test = test
   }
   setThing = (thing: string) => {
-    this.thing = thing
+    this.#thing = thing
   }
 
   #test = 'Classy'
+  #thing = 'Sassy'
 }
 export const classStore = new ClassStore()
 
@@ -74,3 +77,34 @@ export class StaticStore {
     StaticStore.thing = newThing
   }
 }
+
+/* class PersistedStore {
+  @localStorageValue('state', {
+    test: 'wow',
+    thing: 'neat',
+  })
+  state = {
+    test: 'wow',
+    thing: 'neat',
+  }
+
+  get test() {
+    return this.state.test
+  }
+
+  get thing() {
+    return this.state.thing
+  }
+  set thing(newThing: string) {
+    this.state.thing = newThing
+  }
+
+  setTest = (test: string) => {
+    this.state.test = test
+  }
+
+  setThing = (thing: string) => {
+    this.state.thing = thing
+  }
+}
+export const persistedStore = new PersistedStore() */

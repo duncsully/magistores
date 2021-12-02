@@ -1,9 +1,9 @@
-import { createStoreProxy } from './createStoreProxy'
+import { subscribeToStore } from './subscribeToStore'
 
 /** Just a noop to read values */
 const read = (...args: any[]) => args
 
-describe('createStoreProxy', () => {
+describe('subscribeToStore', () => {
   it('calls updaters when a read property changes', () => {
     const testStore = {
       test: 1,
@@ -13,10 +13,10 @@ describe('createStoreProxy', () => {
       },
     }
     const updaterOne = jest.fn()
-    const [instanceOne] = createStoreProxy(testStore, updaterOne)
+    const [instanceOne] = subscribeToStore(testStore, updaterOne)
 
     const updaterTwo = jest.fn()
-    const [instanceTwo] = createStoreProxy(testStore, updaterTwo)
+    const [instanceTwo] = subscribeToStore(testStore, updaterTwo)
 
     read(instanceOne.thing, instanceTwo.thing, instanceTwo.test)
 
@@ -45,10 +45,10 @@ describe('createStoreProxy', () => {
     }
 
     const updaterOne = jest.fn()
-    const [instanceOne] = createStoreProxy(testStore, updaterOne)
+    const [instanceOne] = subscribeToStore(testStore, updaterOne)
 
     const updaterTwo = jest.fn()
-    const [instanceTwo] = createStoreProxy(testStore, updaterTwo)
+    const [instanceTwo] = subscribeToStore(testStore, updaterTwo)
 
     read(instanceTwo.state.test)
 
@@ -73,10 +73,10 @@ describe('createStoreProxy', () => {
     }
 
     const updaterOne = jest.fn()
-    const [instanceOne] = createStoreProxy(testStore, updaterOne)
+    const [instanceOne] = subscribeToStore(testStore, updaterOne)
 
     const updaterTwo = jest.fn()
-    const [instanceTwo] = createStoreProxy(testStore, updaterTwo)
+    const [instanceTwo] = subscribeToStore(testStore, updaterTwo)
 
     read(instanceTwo.state.test)
 
@@ -101,10 +101,10 @@ describe('createStoreProxy', () => {
     }
 
     const updaterOne = jest.fn()
-    const [instanceOne] = createStoreProxy(testStore, updaterOne)
+    const [instanceOne] = subscribeToStore(testStore, updaterOne)
 
     const updaterTwo = jest.fn()
-    const [instanceTwo] = createStoreProxy(testStore, updaterTwo)
+    const [instanceTwo] = subscribeToStore(testStore, updaterTwo)
 
     read(instanceTwo.thing)
 
@@ -125,10 +125,10 @@ describe('createStoreProxy', () => {
     }
 
     const updaterOne = jest.fn()
-    const [instanceOne] = createStoreProxy(testStore, updaterOne)
+    const [instanceOne] = subscribeToStore(testStore, updaterOne)
 
     const updaterTwo = jest.fn()
-    const [instanceTwo] = createStoreProxy(testStore, updaterTwo)
+    const [instanceTwo] = subscribeToStore(testStore, updaterTwo)
 
     read(instanceTwo.test)
 
@@ -162,10 +162,10 @@ describe('createStoreProxy', () => {
     const testStore = new TestStore()
 
     const updaterOne = jest.fn()
-    const [instanceOne] = createStoreProxy(testStore, updaterOne)
+    const [instanceOne] = subscribeToStore(testStore, updaterOne)
 
     const updaterTwo = jest.fn()
-    const [instanceTwo] = createStoreProxy(testStore, updaterTwo)
+    const [instanceTwo] = subscribeToStore(testStore, updaterTwo)
 
     read(
       instanceOne.private,
@@ -197,10 +197,10 @@ describe('createStoreProxy', () => {
     }
 
     const updaterOne = jest.fn()
-    const [instanceOne] = createStoreProxy(TestStore, updaterOne)
+    const [instanceOne] = subscribeToStore(TestStore, updaterOne)
 
     const updaterTwo = jest.fn()
-    const [instanceTwo] = createStoreProxy(TestStore, updaterTwo)
+    const [instanceTwo] = subscribeToStore(TestStore, updaterTwo)
 
     read(instanceTwo.test)
 
