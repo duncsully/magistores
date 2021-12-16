@@ -6,8 +6,9 @@ type SubscribeFunction<T> = (updater: Updater) => readonly [T, () => void]
 const createStoreSubscriber = <T>(store: T): SubscribeFunction<T> => {
   /** This ties each key path to a set of updaters all subscribed to that key path. A key path represents a path on the original store object (e.g. 'someState.someProp') */
   const trackedKeysToUpdatersMap: Record<string, Set<Updater>> = {}
+
   /** For keeping track of all unique updater instances */
-  const allUpdaters = new Set<Updater>()
+  let totalUpdaters = 0
 
   /** Given a key path, return the value from the nested object */
   const getPathValue = (path: string) => {
@@ -28,7 +29,7 @@ const createStoreSubscriber = <T>(store: T): SubscribeFunction<T> => {
     const toUpdate = new Set<Updater>()
     for (const path in trackedKeysToUpdatersMap) {
       // We've already added all updaters, stop checking
-      if (allUpdaters.size === toUpdate.size) break
+      if (totalUpdaters === toUpdate.size) break
 
       if (beforeValues[i] !== afterValues[i]) {
         trackedKeysToUpdatersMap[path]?.forEach((updater) => {
@@ -38,6 +39,7 @@ const createStoreSubscriber = <T>(store: T): SubscribeFunction<T> => {
 
       i++
     }
+
     toUpdate.forEach((updater) => updater())
     return returnValue
   }
@@ -46,7 +48,7 @@ const createStoreSubscriber = <T>(store: T): SubscribeFunction<T> => {
    * and a function to unsubscribe the updater
    */
   return (updater: Updater) => {
-    allUpdaters.add(updater)
+    totalUpdaters++
 
     const createProxy = (obj: any, parentPath?: string) =>
       new Proxy(obj, {
@@ -81,10 +83,12 @@ const createStoreSubscriber = <T>(store: T): SubscribeFunction<T> => {
           doActionAndUpdateSubscribers(func.bind(store, ...args)),
       })
 
-    const unsubscribe = () =>
+    const unsubscribe = () => {
+      totalUpdaters--
       Object.values(trackedKeysToUpdatersMap).forEach((updaters) =>
         updaters.delete(updater)
       )
+    }
     return [createProxy(store) as T, unsubscribe] as const
   }
 }
@@ -98,4 +102,56 @@ export const subscribeToStore = <T>(store: T, updater: Updater) => {
   storeSubscribeFunctions.set(store, subscribe)
 
   return subscribe(updater)
+}
+
+// TODO: Combine approaches
+
+const reactiveStoresMap = new WeakMap<any, any>()
+/** Always get updated on any change */
+const simpleSubscriptionsMap = new WeakMap<any, Set<Updater>>()
+export const getReactiveStore = <T>(store: T) => {
+  const existingReactiveStore = reactiveStoresMap.get(store)
+  if (existingReactiveStore) return existingReactiveStore as T
+
+  const updateAllSimpleSubscriptions = () =>
+    simpleSubscriptions.forEach((updater) => updater())
+
+  const createProxy = (obj: any, parent?: any): any =>
+    new Proxy(obj, {
+      get(obj, key) {
+        const value = obj[key]
+        if (value instanceof Object) {
+          return createProxy(value, obj)
+        }
+        return value
+      },
+      set(obj, key, newValue) {
+        obj[key] = newValue
+        updateAllSimpleSubscriptions()
+        return true
+      },
+      apply(func, _, args) {
+        // Assume that we always want a method to use its containing object's context
+        func.apply(parent, args)
+        updateAllSimpleSubscriptions()
+      },
+    })
+
+  const reactiveStore = createProxy(store)
+  reactiveStoresMap.set(store, reactiveStore)
+
+  const simpleSubscriptions = new Set<Updater>()
+  simpleSubscriptionsMap.set(reactiveStore, simpleSubscriptions)
+
+  return reactiveStore as T
+}
+
+export const subscribeToReactiveStore = <T>(
+  reactiveStore: T,
+  updater: Updater
+) => {
+  const subscriptions = simpleSubscriptionsMap.get(reactiveStore)
+  subscriptions?.add(updater)
+
+  return () => void subscriptions?.delete(updater)
 }
