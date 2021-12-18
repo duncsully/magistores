@@ -15,8 +15,8 @@ export const useStore = <T>(store: T) => {
     [store]
   )
 
-  // Unsubscribe on dismount (function train, choo choo!)
-  useEffect(() => () => unsubscribe(), [unsubscribe])
+  // Unsubscribe on dismount (or if subscription changes because store changes)
+  useEffect(() => unsubscribe, [unsubscribe])
 
   return storeProxy
 }

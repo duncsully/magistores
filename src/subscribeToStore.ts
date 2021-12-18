@@ -1,9 +1,18 @@
+// TODO:
+// Don't use subscribeToStore; use and export results of createStore?
+// Pass Function returning store to createStore vs store object directly for memory optimization?
+// Does WeakMap even work if key is used inside of value?
+
 export type Updater = () => any
 
 type SubscribeFunction<T> = (updater: Updater) => readonly [T, () => void]
 
-/** Given a store, will return a subscribe function that calls the passed updater callback whenever a read property's value changes */
-const createStoreSubscriber = <T>(store: T): SubscribeFunction<T> => {
+/**
+ * Generates a reactive store and subscribe function for the store
+ * @param store The basic object to proxy
+ * @returns 1. a proxy that will update any store subscribers when one of their watched values change and 2. a subscribe function
+ */
+const createStore = <T>(store: T) => {
   /** This ties each key path to a set of updaters all subscribed to that key path. A key path represents a path on the original store object (e.g. 'someState.someProp') */
   const trackedKeysToUpdatersMap: Record<string, Set<Updater>> = {}
 
@@ -44,24 +53,53 @@ const createStoreSubscriber = <T>(store: T): SubscribeFunction<T> => {
     return returnValue
   }
 
-  /** Given an updater, returns a proxy that watches for all read properties (including nested ones) and calls updater when any of the read properties change
-   * and a function to unsubscribe the updater
+  /**
+   * Creates a proxy responsible for updating all subscribers when a watched value changes after a setter or method call
    */
-  return (updater: Updater) => {
-    totalUpdaters++
+  const createUpdaterProxy = (obj: any, parent?: any) =>
+    new Proxy(obj, {
+      get: (obj, key) => {
+        let value = obj[key]
 
-    const createProxy = (obj: any, parentPath?: string) =>
+        // Works for nested objects as well as methods that'll end up going through apply trap
+        if (value instanceof Object) {
+          value = createUpdaterProxy(value, obj)
+        }
+
+        return value
+      },
+      set: (obj, key, newValue) => {
+        doActionAndUpdateSubscribers(() => {
+          obj[key] = newValue
+        })
+        return true
+      },
+      apply: (func, _, args) =>
+        // 'This' context will pretty much always be intended to be the method's object and not the calling context
+        doActionAndUpdateSubscribers(func.bind(parent, ...args)),
+    })
+
+  const updaterProxy = createUpdaterProxy(store)
+
+  /**
+   * Subscribes the passed updater to changes to the store this subscribe function originates from
+   * @param updater A function to call when a read value changes (only called once per set or method)
+   * @returns 1. a proxy that tracks reads to call updater whenever one of these read values changes and 2. an unsubscribe function
+   */
+  const subscribe: SubscribeFunction<T> = (updater: Updater) => {
+    totalUpdaters++
+    /**
+     * Creates a proxy responsible for tracking all reads by a subscriber
+     */
+    const createSubscriberProxy = (obj: any, parentPath?: string) =>
       new Proxy(obj, {
         get: (obj, key) => {
           let value = obj[key]
           const prop = String(key)
           const path = parentPath ? `${parentPath}.${prop}` : prop
 
-          // This wraps objects and functions:
-          // - Objects: Basically turn into sub-stores, so that their nested values can also be watched
-          // - Functions: Go through the apply trap so values can be compared after calling
           if (value instanceof Object) {
-            value = createProxy(value, path)
+            value = createSubscriberProxy(value, path)
           }
 
           if (key !== 'constructor') {
@@ -72,15 +110,6 @@ const createStoreSubscriber = <T>(store: T): SubscribeFunction<T> => {
 
           return value
         },
-        set: (obj, key, newValue) => {
-          doActionAndUpdateSubscribers(() => {
-            obj[key] = newValue
-          })
-          return true
-        },
-        apply: (func, _, args) =>
-          // 'This' context will pretty much always be intended to be the store and not the calling context
-          doActionAndUpdateSubscribers(func.bind(store, ...args)),
       })
 
     const unsubscribe = () => {
@@ -89,69 +118,23 @@ const createStoreSubscriber = <T>(store: T): SubscribeFunction<T> => {
         updaters.delete(updater)
       )
     }
-    return [createProxy(store) as T, unsubscribe] as const
+    return [createSubscriberProxy(updaterProxy), unsubscribe] as const
   }
+
+  return [createUpdaterProxy(store) as T, subscribe] as const
 }
 
-const storeSubscribeFunctions = new WeakMap<any, SubscribeFunction<any>>()
+const stores = new WeakMap<any, ReturnType<typeof createStore>>()
 
-/** Given a store and a callback, will return both a proxy that will track read properties and call callback when any of these change, and an unsubscribe function */
+/**
+ * Subscribes to changes to a basic store object and calls updater on changes
+ * @param store Basic object to track values on and update after setter and method calls
+ * @param updater Function to call when a change is detected
+ * @returns 1. A proxy that tracks read values and calls updater whenever one of these values changes after a setter or method call. 2. An unsubscribe function
+ */
 export const subscribeToStore = <T>(store: T, updater: Updater) => {
-  const subscribe: SubscribeFunction<T> =
-    storeSubscribeFunctions.get(store) ?? createStoreSubscriber(store)
-  storeSubscribeFunctions.set(store, subscribe)
-
-  return subscribe(updater)
-}
-
-// TODO: Combine approaches
-
-const reactiveStoresMap = new WeakMap<any, any>()
-/** Always get updated on any change */
-const simpleSubscriptionsMap = new WeakMap<any, Set<Updater>>()
-export const getReactiveStore = <T>(store: T) => {
-  const existingReactiveStore = reactiveStoresMap.get(store)
-  if (existingReactiveStore) return existingReactiveStore as T
-
-  const updateAllSimpleSubscriptions = () =>
-    simpleSubscriptions.forEach((updater) => updater())
-
-  const createProxy = (obj: any, parent?: any): any =>
-    new Proxy(obj, {
-      get(obj, key) {
-        const value = obj[key]
-        if (value instanceof Object) {
-          return createProxy(value, obj)
-        }
-        return value
-      },
-      set(obj, key, newValue) {
-        obj[key] = newValue
-        updateAllSimpleSubscriptions()
-        return true
-      },
-      apply(func, _, args) {
-        // Assume that we always want a method to use its containing object's context
-        func.apply(parent, args)
-        updateAllSimpleSubscriptions()
-      },
-    })
-
-  const reactiveStore = createProxy(store)
-  reactiveStoresMap.set(store, reactiveStore)
-
-  const simpleSubscriptions = new Set<Updater>()
-  simpleSubscriptionsMap.set(reactiveStore, simpleSubscriptions)
-
-  return reactiveStore as T
-}
-
-export const subscribeToReactiveStore = <T>(
-  reactiveStore: T,
-  updater: Updater
-) => {
-  const subscriptions = simpleSubscriptionsMap.get(reactiveStore)
-  subscriptions?.add(updater)
-
-  return () => void subscriptions?.delete(updater)
+  const data = stores.get(store) ?? createStore(store)
+  stores.set(store, data)
+  const [, subscribe] = data
+  return (subscribe as SubscribeFunction<T>)(updater)
 }
