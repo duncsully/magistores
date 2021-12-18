@@ -1,10 +1,10 @@
 import React from 'react'
 import { useStore } from './useStore'
-import { classStore } from './exampleStores'
+import { persistedStore } from './exampleStores'
 import { UpdatingBorder } from './UpdatingBorder'
 
 export const TestComp = () => {
-  const { test, setTest, setThing } = useStore(classStore)
+  const { test, setTest, setThing } = useStore(persistedStore)
   return (
     <UpdatingBorder>
       <p>{test}</p>

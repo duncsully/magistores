@@ -78,33 +78,63 @@ export class StaticStore {
   }
 }
 
-/* class PersistedStore {
-  @localStorageValue('state', {
-    test: 'wow',
-    thing: 'neat',
-  })
-  state = {
-    test: 'wow',
-    thing: 'neat',
-  }
+const defaultState = {
+  test: 'Persisted',
+  thing: 'State',
+}
+export const persistedStore = {
+  state: JSON.parse(localStorage.getItem('state')!) ?? defaultState,
+
+  setState(state: typeof defaultState) {
+    this.state = state
+    localStorage.setItem('state', JSON.stringify(this.state))
+  },
 
   get test() {
     return this.state.test
-  }
+  },
 
   get thing() {
     return this.state.thing
-  }
-  set thing(newThing: string) {
-    this.state.thing = newThing
+  },
+  set thing(thing: string) {
+    this.setState({ ...this.state, thing })
+  },
+
+  setTest(test: string) {
+    this.setState({ ...this.state, test })
+  },
+
+  setThing(thing: string) {
+    this.setState({ ...this.state, thing })
+  },
+}
+
+export abstract class HistoryStore<T> {
+  protected abstract _state: T
+
+  #history: T[] = []
+  #forward: T[] = []
+
+  get state() {
+    return Object.freeze(this._state)
   }
 
-  setTest = (test: string) => {
-    this.state.test = test
+  setState(changes: Partial<T>) {
+    this.#history.push({ ...this._state })
+    this.#forward = []
+    this._state = { ...this._state, ...changes }
   }
 
-  setThing = (thing: string) => {
-    this.state.thing = thing
+  back() {
+    if (!this.#history.length) return
+    this.#forward.push({ ...this._state })
+    this._state = this.#history.pop() as T
+  }
+
+  forward() {
+    if (!this.#forward.length) return
+    this.#history.push({ ...this._state })
+    this._state = this.#forward.pop() as T
   }
 }
-export const persistedStore = new PersistedStore() */
