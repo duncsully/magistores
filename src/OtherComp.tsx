@@ -1,10 +1,10 @@
 import React from 'react'
-import { persistedStore } from './exampleStores'
+import { subscribeToPersistedStore } from './exampleStores'
 import { UpdatingBorder } from './UpdatingBorder'
 import { useStore } from './useStore'
 
 export const OtherComp = () => {
-  const store = useStore(persistedStore)
+  const store = useStore(subscribeToPersistedStore)
 
   return (
     <UpdatingBorder>

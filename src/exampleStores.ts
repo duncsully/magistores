@@ -1,4 +1,6 @@
-export const testStore = {
+import { createStoreSubscriber } from './createStoreSubscriber'
+
+export const subscribeToTestStore = createStoreSubscriber({
   test: 'dude',
   thing: 'great',
   setTest(newValue: string) {
@@ -7,9 +9,9 @@ export const testStore = {
   setThing(newValue: string) {
     this.thing = newValue
   },
-}
+})
 
-export const stateAndActions = {
+export const subscribeToStateAndActionsStore = createStoreSubscriber({
   state: {
     test: 'dude',
     thing: 'great',
@@ -21,11 +23,11 @@ export const stateAndActions = {
   setThing(thing: string) {
     this.state = { ...this.state, thing }
   },
-}
+})
 
 let _test = 'Awesome'
 let _thing = 'Cool'
-export const gettersAndMethodsStore = {
+export const subscribeToGettersAndMethodsStore = createStoreSubscriber({
   get test() {
     return _test
   },
@@ -41,7 +43,7 @@ export const gettersAndMethodsStore = {
   setThing(thing: string) {
     _thing = thing
   },
-}
+})
 
 class ClassStore {
   get test() {
@@ -65,9 +67,9 @@ class ClassStore {
   #test = 'Classy'
   #thing = 'Sassy'
 }
-export const classStore = new ClassStore()
+export const subscribeToClassStore = createStoreSubscriber(new ClassStore())
 
-export class StaticStore {
+class StaticStore {
   static test = 'Static'
   static thing = 'Shock'
   static setTest = (newTest: string) => {
@@ -78,11 +80,13 @@ export class StaticStore {
   }
 }
 
+export const subscribeToStaticStore = createStoreSubscriber(StaticStore)
+
 const defaultState = {
   test: 'Persisted',
   thing: 'State',
 }
-export const persistedStore = {
+export const subscribeToPersistedStore = createStoreSubscriber({
   state: JSON.parse(localStorage.getItem('state')!) ?? defaultState,
 
   setState(state: typeof defaultState) {
@@ -108,7 +112,7 @@ export const persistedStore = {
   setThing(thing: string) {
     this.setState({ ...this.state, thing })
   },
-}
+})
 
 export abstract class HistoryStore<T> {
   protected abstract _state: T

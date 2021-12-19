@@ -1,14 +1,19 @@
 // TODO:
-// Don't use subscribeToStore; use and export results of createStore?
 // Pass Function returning store to createStore vs store object directly for memory optimization?
-// Does WeakMap even work if key is used inside of value?
 
 export type Updater = () => any
 
-type SubscribeFunction<T> = (updater: Updater) => readonly [T, () => void]
+export type SubscribeFunction<T> = (
+  updater: Updater
+) => readonly [T, () => void]
 
-/** Given a store, will return a subscribe function that calls the passed updater callback whenever a read property's value changes */
-const createStoreSubscriber = <T>(store: T): SubscribeFunction<T> => {
+/**
+ * Creates a subscribe function for the given store object
+ * @param store The store object to watch for changes on
+ * @returns A function that, given an update function, will return both 1. a proxy that tracks reads and changes to values and 2. an unsubscribe function.
+ * The passed updated function will be called whenever a value read from the proxy (nested values included) is changed via any proxy returned from this subscriber
+ */
+export const createStoreSubscriber = <T>(store: T): SubscribeFunction<T> => {
   /** This ties each key path to a set of updaters all subscribed to that key path. A key path represents a path on the original store object (e.g. 'someState.someProp') */
   const trackedKeysToUpdatersMap: Record<string, Set<Updater>> = {}
 
@@ -99,15 +104,4 @@ const createStoreSubscriber = <T>(store: T): SubscribeFunction<T> => {
     }
     return [proxy as T, unsubscribe] as const
   }
-}
-
-const storeSubscribeFunctions = new WeakMap<any, SubscribeFunction<any>>()
-
-/** Given a store and a callback, will return both a proxy that will track read properties and call callback when any of these change, and an unsubscribe function */
-export const subscribeToStore = <T>(store: T, updater: Updater) => {
-  const subscribe: SubscribeFunction<T> =
-    storeSubscribeFunctions.get(store) ?? createStoreSubscriber(store)
-  storeSubscribeFunctions.set(store, subscribe)
-
-  return subscribe(updater)
 }

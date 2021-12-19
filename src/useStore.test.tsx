@@ -2,15 +2,16 @@ import React, { useEffect } from 'react'
 import { render, screen } from '@testing-library/react'
 import { useStore } from './useStore'
 import userEvent from '@testing-library/user-event'
+import { createStoreSubscriber } from './createStoreSubscriber'
 
 describe('useStore', () => {
   it('can be used with simple stores', () => {
-    const testStore = {
+    const testStore = createStoreSubscriber({
       test: 'hi',
       setTest(newTest: string) {
         this.test = newTest
       },
-    }
+    })
 
     const TestComponentOne = () => {
       const { test, setTest } = useStore(testStore)
