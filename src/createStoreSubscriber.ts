@@ -1,4 +1,5 @@
 // TODO:
+// More debugger logs
 // Pass Function returning store to createStore vs store object directly for memory optimization?
 
 export type Updater = () => any
@@ -42,6 +43,9 @@ export const createStoreSubscriber = <T>(store: T): SubscribeFunction<T> => {
       if (totalUpdaters === toUpdate.size) break
 
       if (beforeValues[i] !== afterValues[i]) {
+        console.debug(
+          `Value at path "${paths[i]}" changed from "${beforeValues[i]}" to "${afterValues[i]}"`
+        )
         trackedKeysToUpdatersMap[path]?.forEach((updater) => {
           toUpdate.add(updater)
         })
@@ -77,7 +81,10 @@ export const createStoreSubscriber = <T>(store: T): SubscribeFunction<T> => {
           if (key !== 'constructor') {
             // Subscribe this instance to changes to this property
             const trackingKeys = (trackedKeysToUpdatersMap[path] ??= new Set())
-            trackingKeys.add(updater)
+            if (!trackingKeys.has(updater)) {
+              trackingKeys.add(updater)
+              console.debug(`Adding updater under path: "${path}"`)
+            }
           }
 
           return value
@@ -98,9 +105,14 @@ export const createStoreSubscriber = <T>(store: T): SubscribeFunction<T> => {
     const unsubscribe = () => {
       revoke()
       totalUpdaters--
-      Object.values(trackedKeysToUpdatersMap).forEach((updaters) =>
-        updaters.delete(updater)
-      )
+      Object.entries(trackedKeysToUpdatersMap).forEach(([key, updaters]) => {
+        // Last subscription in the set, remove entry completely
+        if (updaters.size === 1) {
+          delete trackedKeysToUpdatersMap[key]
+        } else {
+          updaters.delete(updater)
+        }
+      })
     }
     return [proxy as T, unsubscribe] as const
   }

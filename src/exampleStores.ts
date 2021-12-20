@@ -89,8 +89,8 @@ const defaultState = {
 export const subscribeToPersistedStore = createStoreSubscriber({
   state: JSON.parse(localStorage.getItem('state')!) ?? defaultState,
 
-  setState(state: typeof defaultState) {
-    this.state = state
+  setState(state: Partial<typeof defaultState>) {
+    this.state = { ...this.state, ...state }
     localStorage.setItem('state', JSON.stringify(this.state))
   },
 
@@ -102,19 +102,19 @@ export const subscribeToPersistedStore = createStoreSubscriber({
     return this.state.thing
   },
   set thing(thing: string) {
-    this.setState({ ...this.state, thing })
+    this.setState({ thing })
   },
 
   setTest(test: string) {
-    this.setState({ ...this.state, test })
+    this.setState({ test })
   },
 
   setThing(thing: string) {
-    this.setState({ ...this.state, thing })
+    this.setState({ thing })
   },
 })
 
-export abstract class HistoryStore<T> {
+abstract class HistoryStore<T> {
   protected abstract _state: T
 
   #history: T[] = []
@@ -142,3 +142,30 @@ export abstract class HistoryStore<T> {
     this._state = this.#forward.pop() as T
   }
 }
+
+class TestHistoryStore extends HistoryStore<{ test: string; thing: string }> {
+  protected _state = { test: 'history', thing: 'state' }
+
+  get test() {
+    return this.state.test
+  }
+
+  get thing() {
+    return this.state.thing
+  }
+  set thing(thing: string) {
+    this.setState({ thing })
+  }
+
+  setTest(test: string) {
+    this.setState({ test })
+  }
+
+  setThing(thing: string) {
+    this.setState({ thing })
+  }
+}
+
+const historyStore = new TestHistoryStore()
+
+export const subscribeToHistoryStore = createStoreSubscriber(historyStore)
