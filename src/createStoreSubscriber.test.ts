@@ -5,13 +5,13 @@ const read = (...args: any[]) => args
 
 describe('subscribeToStore', () => {
   it('calls updaters when a read property changes', () => {
-    const subscribe = createStoreSubscriber({
+    const subscribe = createStoreSubscriber(() => ({
       test: 1,
       thing: 'hello',
       setTest(newTest: number) {
         this.test = newTest
       },
-    })
+    }))
     const updaterOne = jest.fn()
     const [instanceOne] = subscribe(updaterOne)
 
@@ -35,14 +35,14 @@ describe('subscribeToStore', () => {
   })
 
   it('works with nested objects', () => {
-    const subscribe = createStoreSubscriber({
+    const subscribe = createStoreSubscriber(() => ({
       state: {
         test: 1,
       },
       setTest(test: number) {
         this.state = { ...this.state, test }
       },
-    })
+    }))
 
     const updaterOne = jest.fn()
     const [instanceOne] = subscribe(updaterOne)
@@ -63,14 +63,14 @@ describe('subscribeToStore', () => {
   })
 
   it('works when a parent store updates child properties', () => {
-    const subscribe = createStoreSubscriber({
+    const subscribe = createStoreSubscriber(() => ({
       state: {
         test: 1,
       },
       setTest(test: number) {
         this.state.test = test
       },
-    })
+    }))
 
     const updaterOne = jest.fn()
     const [instanceOne] = subscribe(updaterOne)
@@ -86,7 +86,7 @@ describe('subscribeToStore', () => {
   })
 
   it('works when parent properties depend on child properties', () => {
-    const subscribe = createStoreSubscriber({
+    const subscribe = createStoreSubscriber(() => ({
       state: {
         test: {
           thing: 1,
@@ -98,7 +98,7 @@ describe('subscribeToStore', () => {
       get thing() {
         return this.state.thing
       },
-    })
+    }))
 
     const updaterOne = jest.fn()
     const [instanceOne] = subscribe(updaterOne)
@@ -115,14 +115,14 @@ describe('subscribeToStore', () => {
 
   it('works with stores accessing outside variables', () => {
     let test = 1
-    const subscribe = createStoreSubscriber({
+    const subscribe = createStoreSubscriber(() => ({
       get test() {
         return test
       },
       setTest(newTest: number) {
         test = newTest
       },
-    })
+    }))
 
     const updaterOne = jest.fn()
     const [instanceOne] = subscribe(updaterOne)
@@ -159,7 +159,7 @@ describe('subscribeToStore', () => {
         this._test = newTest
       }
     }
-    const subscribe = createStoreSubscriber(new TestStore())
+    const subscribe = createStoreSubscriber(() => new TestStore())
 
     const updaterOne = jest.fn()
     const [instanceOne] = subscribe(updaterOne)
@@ -196,7 +196,7 @@ describe('subscribeToStore', () => {
       }
     }
 
-    const subscribe = createStoreSubscriber(TestStore)
+    const subscribe = createStoreSubscriber(() => TestStore)
 
     const updaterOne = jest.fn()
     const [instanceOne] = subscribe(updaterOne)
@@ -209,5 +209,22 @@ describe('subscribeToStore', () => {
     instanceOne.setTest(2)
 
     expect(updaterTwo).toHaveBeenCalled()
+  })
+
+  it('initializes a new store with passed args on first subscriber', () => {
+    const subscribe = createStoreSubscriber((startingValue: number) => ({
+      test: startingValue,
+    }))
+
+    const updaterOne = jest.fn()
+    const [instance, unsubscribe] = subscribe(updaterOne, [2])
+
+    expect(instance.test).toBe(2)
+
+    unsubscribe()
+
+    const [newInstance] = subscribe(updaterOne, [5])
+
+    expect(newInstance.test).toBe(5)
   })
 })

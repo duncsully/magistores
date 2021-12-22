@@ -1,20 +1,27 @@
 // TODO:
 // More debugger logs
-// Pass Function returning store to createStore vs store object directly for memory optimization?
+// Option to proxy nested values or not?
+// Option to use custom comparison for keyPaths?
+// Should I track and call updaters in order instead of comparing key paths in order?
+// Option to keep existing store object
 
 export type Updater = () => any
 
-export type SubscribeFunction<T> = (
-  updater: Updater
+export type SubscribeFunction<T, K extends any[]> = (
+  updater: Updater,
+  storeArgs?: K
 ) => readonly [T, () => void]
 
 /**
  * Creates a subscribe function for the given store object
- * @param store The store object to watch for changes on
+ * @param createStore A function that returns a store object to watch for changes on, will be called whenever there is a first subscriber
  * @returns A function that, given an update function, will return both 1. a proxy that tracks reads and changes to values and 2. an unsubscribe function.
  * The passed updated function will be called whenever a value read from the proxy (nested values included) is changed via any proxy returned from this subscriber
  */
-export const createStoreSubscriber = <T>(store: T): SubscribeFunction<T> => {
+export const createStoreSubscriber = <T extends (...args: any) => any>(
+  createStore: T
+): SubscribeFunction<ReturnType<T>, Parameters<T>> => {
+  let store: ReturnType<T> | null
   /** This ties each key path to a set of updaters all subscribed to that key path. A key path represents a path on the original store object (e.g. 'someState.someProp') */
   const trackedKeysToUpdatersMap: Record<string, Set<Updater>> = {}
 
@@ -61,7 +68,13 @@ export const createStoreSubscriber = <T>(store: T): SubscribeFunction<T> => {
   /** Given an updater, returns a proxy that watches for all read properties (including nested ones) and calls updater when any of the read properties change
    * and a function to unsubscribe the updater
    */
-  return (updater: Updater) => {
+  return (updater: Updater, storeArgs: Parameters<T> = [] as Parameters<T>) => {
+    // When adding first subscription, initialize the store
+    if (!totalUpdaters) {
+      store = createStore.apply(undefined, storeArgs)
+      console.debug('Created new store', store, 'with args', storeArgs)
+    }
+
     totalUpdaters++
 
     const createProxy = (obj: any, parentPath?: string, parent?: any) =>
@@ -114,6 +127,6 @@ export const createStoreSubscriber = <T>(store: T): SubscribeFunction<T> => {
         }
       })
     }
-    return [proxy as T, unsubscribe] as const
+    return [proxy as ReturnType<T>, unsubscribe] as const
   }
 }

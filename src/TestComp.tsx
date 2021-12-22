@@ -4,7 +4,13 @@ import { subscribeToPersistedStore } from './exampleStores'
 import { UpdatingBorder } from './UpdatingBorder'
 
 export const TestComp = () => {
-  const { test, setTest, setThing } = useStore(subscribeToPersistedStore)
+  const { test, setTest, setThing } = useStore(subscribeToPersistedStore, [
+    'state',
+    {
+      test: 'Persisted',
+      thing: 'State',
+    },
+  ])
   return (
     <UpdatingBorder>
       <p>{test}</p>
