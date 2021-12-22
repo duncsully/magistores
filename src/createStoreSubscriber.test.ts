@@ -227,4 +227,24 @@ describe('subscribeToStore', () => {
 
     expect(newInstance.test).toBe(5)
   })
+
+  it('reuses existing store if keepStore option set true', () => {
+    const subscribe = createStoreSubscriber(
+      (startingValue: number) => ({
+        test: startingValue,
+      }),
+      { keepStore: true }
+    )
+
+    const updaterOne = jest.fn()
+    const [instance, unsubscribe] = subscribe(updaterOne, [2])
+
+    expect(instance.test).toBe(2)
+
+    unsubscribe()
+
+    const [newInstance] = subscribe(updaterOne, [5])
+
+    expect(newInstance.test).toBe(2)
+  })
 })

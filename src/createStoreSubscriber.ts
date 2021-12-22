@@ -3,7 +3,6 @@
 // Option to proxy nested values or not?
 // Option to use custom comparison for keyPaths?
 // Should I track and call updaters in order instead of comparing key paths in order?
-// Option to keep existing store object
 
 export type Updater = () => any
 
@@ -12,6 +11,14 @@ export type SubscribeFunction<T, K extends any[]> = (
   storeArgs?: K
 ) => readonly [T, () => void]
 
+interface CreateStoreSubscriberOptions {
+  keepStore: boolean
+}
+
+const defaultOptions: CreateStoreSubscriberOptions = {
+  keepStore: false,
+}
+
 /**
  * Creates a subscribe function for the given store object
  * @param createStore A function that returns a store object to watch for changes on, will be called whenever there is a first subscriber
@@ -19,9 +26,11 @@ export type SubscribeFunction<T, K extends any[]> = (
  * The passed updated function will be called whenever a value read from the proxy (nested values included) is changed via any proxy returned from this subscriber
  */
 export const createStoreSubscriber = <T extends (...args: any) => any>(
-  createStore: T
+  createStore: T,
+  options: Partial<CreateStoreSubscriberOptions> = {}
 ): SubscribeFunction<ReturnType<T>, Parameters<T>> => {
   let store: ReturnType<T> | null
+  const { keepStore } = { ...defaultOptions, ...options }
   /** This ties each key path to a set of updaters all subscribed to that key path. A key path represents a path on the original store object (e.g. 'someState.someProp') */
   const trackedKeysToUpdatersMap: Record<string, Set<Updater>> = {}
 
@@ -69,8 +78,8 @@ export const createStoreSubscriber = <T extends (...args: any) => any>(
    * and a function to unsubscribe the updater
    */
   return (updater: Updater, storeArgs: Parameters<T> = [] as Parameters<T>) => {
-    // When adding first subscription, initialize the store
-    if (!totalUpdaters) {
+    // If not keepStore and everything has since unsubscribed, reinitialize. Else reuse existing store
+    if (!store || (!totalUpdaters && !keepStore)) {
       store = createStore.apply(undefined, storeArgs)
       console.debug('Created new store', store, 'with args', storeArgs)
     }
