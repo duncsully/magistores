@@ -2,7 +2,6 @@
 // More debugger logs
 // Option to proxy nested values or not?
 // Option to use custom comparison for keyPaths?
-// Should I track and call updaters in order instead of comparing key paths in order?
 
 export type Updater = () => any
 
@@ -31,9 +30,10 @@ export const createStoreSubscriber = <T extends (...args: any) => any>(
 ): SubscribeFunction<ReturnType<T>, Parameters<T>> => {
   let store: ReturnType<T> | null
   const { keepStore } = { ...defaultOptions, ...options }
-  /** This ties each key path to a set of updaters all subscribed to that key path. A key path represents a path on the original store object (e.g. 'someState.someProp') */
-  const trackedKeysToUpdatersMap: Record<string, Set<Updater>> = {}
-
+  /** This records all tracked key paths and the last read value. A key path represents a path on the original store object (e.g. 'someState.someProp') */
+  const previouslyReadValues: Record<string, any> = {}
+  /** This records all paths an updater is tracking for changes to */
+  const updaterToTrackedPathsMap = new Map<Updater, Set<string>>()
   /** For keeping track of all unique updater instances */
   let totalUpdaters = 0
 
@@ -45,33 +45,27 @@ export const createStoreSubscriber = <T extends (...args: any) => any>(
     return currentVal
   }
 
-  /** Given an action to call, will compare all subscribed values before and after the action, calling every updater listening to any of the changed values */
-  const doActionAndUpdateSubscribers = (action: () => any) => {
-    const paths = Object.keys(trackedKeysToUpdatersMap)
-    const beforeValues = paths.map(getPathValue)
-    const returnValue = action()
-    const afterValues = paths.map(getPathValue)
-
-    let i = 0
-    const toUpdate = new Set<Updater>()
-    for (const path in trackedKeysToUpdatersMap) {
-      // We've already added all updaters, stop checking
-      if (totalUpdaters === toUpdate.size) break
-
-      if (beforeValues[i] !== afterValues[i]) {
+  /** Iterates through all tracked paths, checks for which ones changed, and calls any updater tracking a changed path value */
+  const checkForUpdates = () => {
+    const updatedPaths: string[] = []
+    Object.entries(previouslyReadValues).forEach(([path, prevValue]) => {
+      const currentVal = getPathValue(path)
+      if (prevValue !== currentVal) {
         console.debug(
-          `Value at path "${paths[i]}" changed from "${beforeValues[i]}" to "${afterValues[i]}"`
+          `Path "${path}" changed from`,
+          prevValue,
+          'to',
+          currentVal
         )
-        trackedKeysToUpdatersMap[path]?.forEach((updater) => {
-          toUpdate.add(updater)
-        })
+        updatedPaths.push(path)
+        previouslyReadValues[path] = currentVal
       }
-
-      i++
-    }
-
-    toUpdate.forEach((updater) => updater())
-    return returnValue
+    })
+    updaterToTrackedPathsMap.forEach((paths, updater) => {
+      if (Array.from(paths).some((path) => updatedPaths.includes(path))) {
+        updater()
+      }
+    })
   }
 
   /** Given an updater, returns a proxy that watches for all read properties (including nested ones) and calls updater when any of the read properties change
@@ -85,6 +79,8 @@ export const createStoreSubscriber = <T extends (...args: any) => any>(
     }
 
     totalUpdaters++
+    const trackedKeys = new Set<string>()
+    updaterToTrackedPathsMap.set(updater, trackedKeys)
 
     const createProxy = (obj: any, parentPath?: string, parent?: any) =>
       Proxy.revocable(obj, {
@@ -93,6 +89,12 @@ export const createStoreSubscriber = <T extends (...args: any) => any>(
           const prop = String(key)
           const path = parentPath ? `${parentPath}.${prop}` : prop
 
+          if (key !== 'constructor') {
+            previouslyReadValues[path] = value
+            // Subscribe this instance to changes to this property
+            trackedKeys.add(path)
+          }
+
           // This wraps objects and functions:
           // - Objects: Basically turn into sub-stores, so that their nested values can also be watched
           // - Functions: Go through the apply trap so values can be compared after calling
@@ -100,26 +102,19 @@ export const createStoreSubscriber = <T extends (...args: any) => any>(
             value = createProxy(value, path, obj).proxy
           }
 
-          if (key !== 'constructor') {
-            // Subscribe this instance to changes to this property
-            const trackingKeys = (trackedKeysToUpdatersMap[path] ??= new Set())
-            if (!trackingKeys.has(updater)) {
-              trackingKeys.add(updater)
-              console.debug(`Adding updater under path: "${path}"`)
-            }
-          }
-
           return value
         },
         set(obj, key, newValue) {
-          doActionAndUpdateSubscribers(() => {
-            obj[key] = newValue
-          })
+          obj[key] = newValue
+          checkForUpdates()
           return true
         },
-        apply: (func, _, args) =>
+        apply(func, _, args) {
           // 'This' context will pretty much always be intended to be parent object and not the calling context
-          doActionAndUpdateSubscribers(func.bind(parent, ...args)),
+          const returnValue = func.apply(parent, args)
+          checkForUpdates()
+          return returnValue
+        },
       })
 
     const { proxy, revoke } = createProxy(store)
@@ -127,14 +122,7 @@ export const createStoreSubscriber = <T extends (...args: any) => any>(
     const unsubscribe = () => {
       revoke()
       totalUpdaters--
-      Object.entries(trackedKeysToUpdatersMap).forEach(([key, updaters]) => {
-        // Last subscription in the set, remove entry completely
-        if (updaters.size === 1) {
-          delete trackedKeysToUpdatersMap[key]
-        } else {
-          updaters.delete(updater)
-        }
-      })
+      updaterToTrackedPathsMap.delete(updater)
     }
     return [proxy as ReturnType<T>, unsubscribe] as const
   }
