@@ -212,9 +212,11 @@ describe('subscribeToStore', () => {
   })
 
   it('initializes a new store with passed args on first subscriber', () => {
-    const subscribe = createStoreSubscriber((startingValue: number) => ({
-      test: startingValue,
-    }))
+    const subscribe = createStoreSubscriber(
+      (update, startingValue: number) => ({
+        test: startingValue,
+      })
+    )
 
     const updaterOne = jest.fn()
     const [instance, unsubscribe] = subscribe(updaterOne, [2])
@@ -230,7 +232,7 @@ describe('subscribeToStore', () => {
 
   it('reuses existing store if keepStore option set true', () => {
     const subscribe = createStoreSubscriber(
-      (startingValue: number) => ({
+      (update, startingValue: number) => ({
         test: startingValue,
       }),
       { keepStore: true }
@@ -246,5 +248,25 @@ describe('subscribeToStore', () => {
     const [newInstance] = subscribe(updaterOne, [5])
 
     expect(newInstance.test).toBe(2)
+  })
+
+  it('can manually update via the first parameter in the store creator', () => {
+    const obj = { test: 3, update: () => {} }
+    const subscribe = createStoreSubscriber((update) => {
+      obj.update = update
+      return obj
+    })
+
+    const updater = jest.fn()
+    const [instance] = subscribe(updater)
+
+    read(instance.test)
+    obj.test = 4
+
+    expect(updater).not.toHaveBeenCalled()
+
+    obj.update()
+
+    expect(updater).toHaveBeenCalled()
   })
 })

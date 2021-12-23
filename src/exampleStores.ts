@@ -89,7 +89,7 @@ interface PersistedState {
   thing: string
 }
 export const subscribeToPersistedStore = createStoreSubscriber(
-  (localStorageKey: string, defaultState: PersistedState) => ({
+  (_, localStorageKey: string, defaultState: PersistedState) => ({
     state: JSON.parse(localStorage.getItem(localStorageKey)!) ?? defaultState,
 
     setState(state: Partial<typeof defaultState>) {
