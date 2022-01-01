@@ -1,8 +1,9 @@
 // TODO:
 // More debugger logs
 // Option to proxy nested values or not?
-// Option to use custom comparison for keyPaths?
 // Option to not automatically call checkForUpdates in setter and/or methods?
+// Make React dev dependency and optional peer dependency
+// Add support for other frameworks: Svelte, Vue, Lit
 
 export type Updater = () => any
 
@@ -12,10 +13,13 @@ export type SubscribeFunction<T> = (
 
 interface CreateStoreSubscriberOptions {
   keepStore: boolean
+  // TODO: Add more robust typing
+  hasChanged: (prevValue: any, currentVal: any, path: string) => boolean
 }
 
 const defaultOptions: CreateStoreSubscriberOptions = {
   keepStore: false,
+  hasChanged: (prevValue, currentValue) => prevValue !== currentValue,
 }
 
 /**
@@ -31,7 +35,7 @@ export const createStoreSubscriber = <
   options: Partial<CreateStoreSubscriberOptions> = {}
 ): SubscribeFunction<ReturnType<T>> => {
   let store: ReturnType<T> | null
-  const { keepStore } = { ...defaultOptions, ...options }
+  const { keepStore, hasChanged } = { ...defaultOptions, ...options }
   /** This records all tracked key paths and the last read value. A key path represents a path on the original store object (e.g. 'someState.someProp') */
   const previouslyReadValues: Record<string, any> = {}
   /** This records all paths an updater is tracking for changes to */
@@ -51,16 +55,16 @@ export const createStoreSubscriber = <
   const checkForUpdates = () => {
     const updatedPaths: string[] = []
     Object.entries(previouslyReadValues).forEach(([path, prevValue]) => {
-      const currentVal = getPathValue(path)
-      if (prevValue !== currentVal) {
+      const currentValue = getPathValue(path)
+      if (hasChanged(prevValue, currentValue, path)) {
         console.debug(
           `Path "${path}" changed from`,
           prevValue,
           'to',
-          currentVal
+          currentValue
         )
         updatedPaths.push(path)
-        previouslyReadValues[path] = currentVal
+        previouslyReadValues[path] = currentValue
       }
     })
     updaterToTrackedPathsMap.forEach((paths, updater) => {
@@ -75,7 +79,7 @@ export const createStoreSubscriber = <
    */
   return (updater: Updater) => {
     // If not keepStore and everything has since unsubscribed, reinitialize. Else reuse existing store
-    if (!store || (!totalUpdaters && !keepStore)) {
+    if (!store || !(totalUpdaters || keepStore)) {
       store = createStore(checkForUpdates)
       console.debug('Created new store', store)
     }

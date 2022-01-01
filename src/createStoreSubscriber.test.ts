@@ -3,7 +3,7 @@ import { createStoreSubscriber } from './createStoreSubscriber'
 /** Just a noop to read values */
 const read = (...args: any[]) => args
 
-describe('subscribeToStore', () => {
+describe('createStoreSubscriber', () => {
   it('calls updaters when a read property changes', () => {
     const subscribe = createStoreSubscriber(() => ({
       test: 1,
@@ -211,7 +211,7 @@ describe('subscribeToStore', () => {
     expect(updaterTwo).toHaveBeenCalled()
   })
 
-  it('initializes a new store with passed args on first subscriber', () => {
+  it('initializes a new store on first subscriber', () => {
     const subscribe = createStoreSubscriber(() => ({
       test: 5,
     }))
@@ -226,26 +226,6 @@ describe('subscribeToStore', () => {
     const [newInstance] = subscribe(updaterOne)
 
     expect(newInstance.test).toBe(5)
-  })
-
-  it('reuses existing store if keepStore option set true', () => {
-    const subscribe = createStoreSubscriber(
-      () => ({
-        test: 5,
-      }),
-      { keepStore: true }
-    )
-
-    const updaterOne = jest.fn()
-    const [instance, unsubscribe] = subscribe(updaterOne)
-
-    instance.test = 2
-
-    unsubscribe()
-
-    const [newInstance] = subscribe(updaterOne)
-
-    expect(newInstance.test).toBe(2)
   })
 
   it('can manually update via the first parameter in the store creator', () => {
@@ -266,5 +246,49 @@ describe('subscribeToStore', () => {
     obj.update()
 
     expect(updater).toHaveBeenCalled()
+  })
+
+  describe('options', () => {
+    describe('keepStore', () => {
+      it('reuses existing store if set true', () => {
+        const subscribe = createStoreSubscriber(
+          () => ({
+            test: 5,
+          }),
+          { keepStore: true }
+        )
+
+        const updaterOne = jest.fn()
+        const [instance, unsubscribe] = subscribe(updaterOne)
+
+        instance.test = 2
+
+        unsubscribe()
+
+        const [newInstance] = subscribe(updaterOne)
+
+        expect(newInstance.test).toBe(2)
+      })
+    })
+
+    describe('hasChanged', () => {
+      it('allows specifying custom check for updating', () => {
+        const subscribe = createStoreSubscriber(() => ({ test: [1, 2] }), {
+          hasChanged: (prev, current) =>
+            prev.every((val: any, i: number) => val === current[i]),
+        })
+
+        const updater = jest.fn()
+        const [instance] = subscribe(updater)
+
+        instance.test = [1, 2]
+
+        expect(updater).not.toHaveBeenCalled()
+
+        instance.test[1] = 3
+
+        expect(updater).toHaveBeenCalled()
+      })
+    })
   })
 })
