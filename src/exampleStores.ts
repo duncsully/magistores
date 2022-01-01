@@ -84,39 +84,38 @@ class StaticStore {
 
 export const subscribeToStaticStore = createStoreSubscriber(() => StaticStore)
 
-interface PersistedState {
-  test: string
-  thing: string
+const defaultState = {
+  test: 'Persisted',
+  thing: 'State',
 }
-export const subscribeToPersistedStore = createStoreSubscriber(
-  (_, localStorageKey: string, defaultState: PersistedState) => ({
-    state: JSON.parse(localStorage.getItem(localStorageKey)!) ?? defaultState,
+const localStorageKey = 'state'
+export const subscribeToPersistedStore = createStoreSubscriber(() => ({
+  state: JSON.parse(localStorage.getItem(localStorageKey)!) ?? defaultState,
 
-    setState(state: Partial<typeof defaultState>) {
-      this.state = { ...this.state, ...state }
-      localStorage.setItem(localStorageKey, JSON.stringify(this.state))
-    },
+  setState(state: Partial<typeof defaultState>) {
+    this.state = { ...this.state, ...state }
+    localStorage.setItem(localStorageKey, JSON.stringify(this.state))
+  },
 
-    get test() {
-      return this.state.test
-    },
+  get test() {
+    return this.state.test
+  },
 
-    get thing() {
-      return this.state.thing
-    },
-    set thing(thing: string) {
-      this.setState({ thing })
-    },
+  get thing() {
+    return this.state.thing
+  },
+  set thing(thing: string) {
+    this.setState({ thing })
+  },
 
-    setTest(test: string) {
-      this.setState({ test })
-    },
+  setTest(test: string) {
+    this.setState({ test })
+  },
 
-    setThing(thing: string) {
-      this.setState({ thing })
-    },
-  })
-)
+  setThing(thing: string) {
+    this.setState({ thing })
+  },
+}))
 
 abstract class HistoryStore<T> {
   protected abstract _state: T

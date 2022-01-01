@@ -6,9 +6,8 @@
 
 export type Updater = () => any
 
-export type SubscribeFunction<T, K extends any[]> = (
-  updater: Updater,
-  storeArgs?: K
+export type SubscribeFunction<T> = (
+  updater: Updater
 ) => readonly [T, () => void]
 
 interface CreateStoreSubscriberOptions {
@@ -26,12 +25,11 @@ const defaultOptions: CreateStoreSubscriberOptions = {
  * The passed updated function will be called whenever a value read from the proxy (nested values included) is changed via any proxy returned from this subscriber
  */
 export const createStoreSubscriber = <
-  K extends any[],
-  T extends (checkForUpdates: () => void, ...args: K) => any
+  T extends (checkForUpdates: () => void) => any
 >(
   createStore: T,
   options: Partial<CreateStoreSubscriberOptions> = {}
-): SubscribeFunction<ReturnType<T>, K> => {
+): SubscribeFunction<ReturnType<T>> => {
   let store: ReturnType<T> | null
   const { keepStore } = { ...defaultOptions, ...options }
   /** This records all tracked key paths and the last read value. A key path represents a path on the original store object (e.g. 'someState.someProp') */
@@ -72,15 +70,14 @@ export const createStoreSubscriber = <
     })
   }
 
-  // TODO: Not sure why typing with K is weird, but it works
   /** Given an updater, returns a proxy that watches for all read properties (including nested ones) and calls updater when any of the read properties change
    * and a function to unsubscribe the updater
    */
-  return (updater: Updater, storeArgs: K = [] as any) => {
+  return (updater: Updater) => {
     // If not keepStore and everything has since unsubscribed, reinitialize. Else reuse existing store
     if (!store || (!totalUpdaters && !keepStore)) {
-      store = createStore(checkForUpdates, ...storeArgs)
-      console.debug('Created new store', store, 'with args', storeArgs)
+      store = createStore(checkForUpdates)
+      console.debug('Created new store', store)
     }
 
     totalUpdaters++
