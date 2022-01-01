@@ -275,17 +275,18 @@ describe('createStoreSubscriber', () => {
       it('allows specifying custom check for updating', () => {
         const subscribe = createStoreSubscriber(() => ({ test: [1, 2] }), {
           hasChanged: (prev, current) =>
-            prev.every((val: any, i: number) => val === current[i]),
+            prev.some((val: any, i: number) => val !== current[i]),
         })
 
         const updater = jest.fn()
         const [instance] = subscribe(updater)
 
+        read(instance.test)
         instance.test = [1, 2]
 
         expect(updater).not.toHaveBeenCalled()
 
-        instance.test[1] = 3
+        instance.test = [1, 3]
 
         expect(updater).toHaveBeenCalled()
       })
