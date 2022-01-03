@@ -1,9 +1,8 @@
 // TODO:
 // More debugger logs
-// Option to proxy nested values or not?
-// Option to not automatically call checkForUpdates in setter and/or methods?
 // Make React dev dependency and optional peer dependency
 // Add support for other frameworks: Svelte, Vue, Lit
+// Cache nested proxies?
 
 export type Updater = () => any
 
@@ -11,15 +10,23 @@ export type SubscribeFunction<T> = (
   updater: Updater
 ) => readonly [T, () => void]
 
-interface CreateStoreSubscriberOptions {
-  keepStore: boolean
-  // TODO: Add more robust typing
-  hasChanged: (prevValue: any, currentVal: any, path: string) => boolean
+interface CommonArgs<T, K> {
+  store: T
+  path: string
+  obj: K
+  key: keyof K
 }
-
-const defaultOptions: CreateStoreSubscriberOptions = {
-  keepStore: false,
-  hasChanged: (prevValue, currentValue) => prevValue !== currentValue,
+interface CreateStoreSubscriberOptions {
+  keepStore?: boolean
+  // TODO: Add more robust typing
+  hasChanged?: <T>(args: {
+    previousValue: any
+    currentValue: any
+    path: string
+    store: T
+  }) => boolean
+  onSet?: <T, K>(args: CommonArgs<T, K>) => boolean
+  onMethodCall?: <T, K>(args: CommonArgs<T, K>) => boolean
 }
 
 /**
@@ -32,10 +39,16 @@ export const createStoreSubscriber = <
   T extends (checkForUpdates: () => void) => any
 >(
   createStore: T,
-  options: Partial<CreateStoreSubscriberOptions> = {}
+  options: CreateStoreSubscriberOptions = {}
 ): SubscribeFunction<ReturnType<T>> => {
   let store: ReturnType<T> | null
-  const { keepStore, hasChanged } = { ...defaultOptions, ...options }
+  const {
+    keepStore = false,
+    hasChanged = ({ previousValue, currentValue }) =>
+      previousValue !== currentValue,
+    onSet = () => true,
+    onMethodCall = () => true,
+  } = options
   /** This records all tracked key paths and the last read value. A key path represents a path on the original store object (e.g. 'someState.someProp') */
   const previouslyReadValues: Record<string, any> = {}
   /** This records all paths an updater is tracking for changes to */
@@ -53,13 +66,14 @@ export const createStoreSubscriber = <
 
   /** Iterates through all tracked paths, checks for which ones changed, and calls any updater tracking a changed path value */
   const checkForUpdates = () => {
+    console.debug('Beginning to check for updates')
     const updatedPaths: string[] = []
-    Object.entries(previouslyReadValues).forEach(([path, prevValue]) => {
+    Object.entries(previouslyReadValues).forEach(([path, previousValue]) => {
       const currentValue = getPathValue(path)
-      if (hasChanged(prevValue, currentValue, path)) {
+      if (hasChanged({ previousValue, currentValue, path, store })) {
         console.debug(
           `Path "${path}" changed from`,
-          prevValue,
+          previousValue,
           'to',
           currentValue
         )
@@ -72,6 +86,7 @@ export const createStoreSubscriber = <
         updater()
       }
     })
+    console.debug('Finished checking for updates')
   }
 
   /** Given an updater, returns a proxy that watches for all read properties (including nested ones) and calls updater when any of the read properties change
@@ -112,13 +127,22 @@ export const createStoreSubscriber = <
         },
         set(obj, key, newValue) {
           obj[key] = newValue
-          checkForUpdates()
+          const prop = String(key)
+          const path = parentPath ? `${parentPath}.${prop}` : prop
+          if (onSet({ store, path, key, obj })) {
+            checkForUpdates()
+          }
           return true
         },
         apply(func, _, args) {
+          const path = parentPath ?? ''
+          const dotLastIndex = path.lastIndexOf('.')
+          const key = dotLastIndex > -1 ? path?.slice(dotLastIndex) : path
           // 'This' context will pretty much always be intended to be parent object and not the calling context
           const returnValue = func.apply(parent, args)
-          checkForUpdates()
+          if (onMethodCall({ store, path, key, obj: parent })) {
+            checkForUpdates()
+          }
           return returnValue
         },
       })

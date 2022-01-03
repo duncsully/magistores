@@ -274,8 +274,10 @@ describe('createStoreSubscriber', () => {
     describe('hasChanged', () => {
       it('allows specifying custom check for updating', () => {
         const subscribe = createStoreSubscriber(() => ({ test: [1, 2] }), {
-          hasChanged: (prev, current) =>
-            prev.some((val: any, i: number) => val !== current[i]),
+          hasChanged: ({ previousValue, currentValue }) =>
+            previousValue.some(
+              (val: any, i: number) => val !== currentValue[i]
+            ),
         })
 
         const updater = jest.fn()
@@ -287,6 +289,66 @@ describe('createStoreSubscriber', () => {
         expect(updater).not.toHaveBeenCalled()
 
         instance.test = [1, 3]
+
+        expect(updater).toHaveBeenCalled()
+      })
+    })
+
+    describe('onSet', () => {
+      it('does not check for updates if returning false', () => {
+        const subscribe = createStoreSubscriber(
+          () => ({
+            test: 'hi',
+            state: {
+              nested: 'hello',
+            },
+          }),
+          {
+            onSet: ({ path }) => path.indexOf('.') === -1,
+          }
+        )
+        const updater = jest.fn()
+        const [instance] = subscribe(updater)
+
+        read(instance.test, instance.state.nested)
+        instance.state.nested = 'bye'
+
+        expect(updater).not.toHaveBeenCalled()
+
+        instance.test = 'Oi'
+
+        expect(updater).toHaveBeenCalled()
+      })
+    })
+
+    describe('onMethodCall', () => {
+      it('does not check for updates if returning false', () => {
+        const subscribe = createStoreSubscriber(
+          () => ({
+            test: {
+              nested: 'hi',
+              update() {
+                this.nested = 'hoi'
+              },
+            },
+            doThing() {
+              this.test.nested = 'great'
+            },
+          }),
+          {
+            onMethodCall: ({ path }) => path.indexOf('.') === -1,
+          }
+        )
+
+        const updater = jest.fn()
+        const [instance] = subscribe(updater)
+
+        read(instance.test.nested)
+        instance.test.update()
+
+        expect(updater).not.toHaveBeenCalled()
+
+        instance.doThing()
 
         expect(updater).toHaveBeenCalled()
       })
