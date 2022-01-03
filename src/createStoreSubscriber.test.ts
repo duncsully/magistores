@@ -249,13 +249,13 @@ describe('createStoreSubscriber', () => {
   })
 
   describe('options', () => {
-    describe('keepStore', () => {
-      it('reuses existing store if set true', () => {
+    describe('onCleanup', () => {
+      it('reuses existing store if returning false', () => {
         const subscribe = createStoreSubscriber(
           () => ({
             test: 5,
           }),
-          { keepStore: true }
+          { onCleanup: () => false }
         )
 
         const updaterOne = jest.fn()

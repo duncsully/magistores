@@ -11,22 +11,47 @@ export type SubscribeFunction<T> = (
 ) => readonly [T, () => void]
 
 interface CommonArgs<T, K> {
+  /** A reference to the store object */
   store: T
+  /** A representation of the property path for nested values (e.g. "state.someObject.someProperty") */
   path: string
+  /** The target object */
   obj: K
+  /** The key for this setter/method */
   key: keyof K
 }
+
 interface CreateStoreSubscriberOptions {
-  keepStore?: boolean
   // TODO: Add more robust typing
+  /**
+   * Check if a value should be considered as changed for the purpose of updating subscribers to that value
+   * @returns True if should update subscribers, else false
+   */
   hasChanged?: <T>(args: {
+    /** The previously read value by any subscriber */
     previousValue: any
+    /** The current value */
     currentValue: any
+    /** A representation of the property path for nested values (e.g. "state.someObject.someProperty") */
     path: string
+    /** A reference to the store object */
     store: T
   }) => boolean
+  /**
+   * Callback to run after setter
+   * @returns True if should check for updates, else false
+   */
   onSet?: <T, K>(args: CommonArgs<T, K>) => boolean
+  /**
+   * Callback to run after method call
+   * @returns True if should check for updates, else false
+   */
   onMethodCall?: <T, K>(args: CommonArgs<T, K>) => boolean
+  /**
+   * Callback to run after last subscriber unsubscribes
+   * @returns True if should delete the current store, else false to keep the current store for any new subscribers instead of creating a new one
+   */
+  onCleanup?: <T>(store: T) => boolean
 }
 
 /**
@@ -43,11 +68,11 @@ export const createStoreSubscriber = <
 ): SubscribeFunction<ReturnType<T>> => {
   let store: ReturnType<T> | null
   const {
-    keepStore = false,
     hasChanged = ({ previousValue, currentValue }) =>
       previousValue !== currentValue,
     onSet = () => true,
     onMethodCall = () => true,
+    onCleanup = () => true,
   } = options
   /** This records all tracked key paths and the last read value. A key path represents a path on the original store object (e.g. 'someState.someProp') */
   const previouslyReadValues: Record<string, any> = {}
@@ -65,8 +90,8 @@ export const createStoreSubscriber = <
   }
 
   /** Iterates through all tracked paths, checks for which ones changed, and calls any updater tracking a changed path value */
-  const checkForUpdates = () => {
-    console.debug('Beginning to check for updates')
+  const checkForUpdates = (debugStatement?: string) => {
+    console.debug(debugStatement ?? 'Manual call triggered check for updates')
     const updatedPaths: string[] = []
     Object.entries(previouslyReadValues).forEach(([path, previousValue]) => {
       const currentValue = getPathValue(path)
@@ -93,8 +118,7 @@ export const createStoreSubscriber = <
    * and a function to unsubscribe the updater
    */
   return (updater: Updater) => {
-    // If not keepStore and everything has since unsubscribed, reinitialize. Else reuse existing store
-    if (!store || !(totalUpdaters || keepStore)) {
+    if (!store) {
       store = createStore(checkForUpdates)
       console.debug('Created new store', store)
     }
@@ -130,7 +154,9 @@ export const createStoreSubscriber = <
           const prop = String(key)
           const path = parentPath ? `${parentPath}.${prop}` : prop
           if (onSet({ store, path, key, obj })) {
-            checkForUpdates()
+            checkForUpdates(
+              `Setter at path "${path}" triggered check for updates`
+            )
           }
           return true
         },
@@ -141,7 +167,9 @@ export const createStoreSubscriber = <
           // 'This' context will pretty much always be intended to be parent object and not the calling context
           const returnValue = func.apply(parent, args)
           if (onMethodCall({ store, path, key, obj: parent })) {
-            checkForUpdates()
+            checkForUpdates(
+              `Method call at path "${path}" triggered check for updates`
+            )
           }
           return returnValue
         },
@@ -153,6 +181,10 @@ export const createStoreSubscriber = <
       revoke()
       totalUpdaters--
       updaterToTrackedPathsMap.delete(updater)
+      if (!totalUpdaters && onCleanup(store!)) {
+        console.debug('Deleting store', store)
+        store = null
+      }
     }
     return [proxy as ReturnType<T>, unsubscribe] as const
   }
