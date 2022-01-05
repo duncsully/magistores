@@ -8,7 +8,7 @@ export type Updater = () => any
 
 export type SubscribeFunction<T> = (
   updater: Updater
-) => readonly [T, () => void]
+) => readonly [T, (debugStatement?: string) => void]
 
 interface CommonArgs<T, K> {
   /** A reference to the store object */
@@ -39,19 +39,19 @@ interface CreateStoreSubscriberOptions {
   }) => boolean
   /**
    * Callback to run after setter
-   * @returns True if should check for updates, else false
+   * @returns false if shouldn't check for updates
    */
-  onSet?: <T, K>(args: CommonArgs<T, K>) => boolean
+  onSet?: <T, K>(args: CommonArgs<T, K>) => boolean | undefined | void
   /**
    * Callback to run after method call
-   * @returns True if should check for updates, else false
+   * @returns false if shouldn't check for updates
    */
-  onMethodCall?: <T, K>(args: CommonArgs<T, K>) => boolean
+  onMethodCall?: <T, K>(args: CommonArgs<T, K>) => boolean | undefined | void
   /**
    * Callback to run after last subscriber unsubscribes
-   * @returns True if should delete the current store, else false to keep the current store for any new subscribers instead of creating a new one
+   * @returns false to keep the current store for any new subscribers instead of creating a new one
    */
-  onCleanup?: <T>(store: T) => boolean
+  onCleanup?: <T>(store: T) => boolean | undefined | void
 }
 
 /**
@@ -153,7 +153,7 @@ export const createStoreSubscriber = <
           obj[key] = newValue
           const prop = String(key)
           const path = parentPath ? `${parentPath}.${prop}` : prop
-          if (onSet({ store, path, key, obj })) {
+          if (onSet({ store, path, key, obj }) ?? true) {
             checkForUpdates(
               `Setter at path "${path}" triggered check for updates`
             )
@@ -166,7 +166,7 @@ export const createStoreSubscriber = <
           const key = dotLastIndex > -1 ? path?.slice(dotLastIndex) : path
           // 'This' context will pretty much always be intended to be parent object and not the calling context
           const returnValue = func.apply(parent, args)
-          if (onMethodCall({ store, path, key, obj: parent })) {
+          if (onMethodCall({ store, path, key, obj: parent }) ?? true) {
             checkForUpdates(
               `Method call at path "${path}" triggered check for updates`
             )
@@ -181,7 +181,7 @@ export const createStoreSubscriber = <
       revoke()
       totalUpdaters--
       updaterToTrackedPathsMap.delete(updater)
-      if (!totalUpdaters && onCleanup(store!)) {
+      if (!totalUpdaters && (onCleanup(store!) ?? true)) {
         console.debug('Deleting store', store)
         store = null
       }

@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useReducer } from 'react'
 import { SubscribeFunction } from './createStoreSubscriber'
 
-/** A hook for subscribing to stores. Any changes to properties used by a component (and only used properties) will rerender the component
+/** A hook for handling subscribing a React component to a store created with createStoreSubscriber
  * @param subscribe - The subscribe function returned from createStoreSubscriber
- * @param storeArgs - All arguments to pass to createStore function passed for the subscribe function. Note: Generally only need to pass these for the first element responsible for initializing the store
  */
 export const useStore = <T>(subscribe: SubscribeFunction<T>) => {
   // Note that while in React dev mode, you'll see two updaters per subscription. This isn't a problem in production mode.
