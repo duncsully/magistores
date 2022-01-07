@@ -336,7 +336,7 @@ describe('createStoreSubscriber', () => {
             },
           }),
           {
-            onMethodCall: ({ path }) => path.indexOf('.') === -1,
+            onMethodCall: ({ obj, store }) => obj === store,
           }
         )
 

@@ -10,24 +10,24 @@ export type SubscribeFunction<T> = (
   updater: Updater
 ) => readonly [T, (debugStatement?: string) => void]
 
-interface CommonArgs<T, K> {
+interface CommonArgs<T> {
   /** A reference to the store object */
   store: T
   /** A representation of the property path for nested values (e.g. "state.someObject.someProperty") */
   path: string
   /** The target object */
-  obj: K
+  obj: any
   /** The key for this setter/method */
-  key: keyof K
+  key: string | symbol
 }
 
-interface CreateStoreSubscriberOptions {
+interface CreateStoreSubscriberOptions<T> {
   // TODO: Add more robust typing
   /**
    * Check if a value should be considered as changed for the purpose of updating subscribers to that value
    * @returns True if should update subscribers, else false
    */
-  hasChanged?: <T>(args: {
+  hasChanged?: (args: {
     /** The previously read value by any subscriber */
     previousValue: any
     /** The current value */
@@ -41,17 +41,17 @@ interface CreateStoreSubscriberOptions {
    * Callback to run after setter
    * @returns false if shouldn't check for updates
    */
-  onSet?: <T, K>(args: CommonArgs<T, K>) => boolean | undefined | void
+  onSet?: (args: CommonArgs<T>) => boolean | undefined | void
   /**
    * Callback to run after method call
    * @returns false if shouldn't check for updates
    */
-  onMethodCall?: <T, K>(args: CommonArgs<T, K>) => boolean | undefined | void
+  onMethodCall?: (args: CommonArgs<T>) => boolean | undefined | void
   /**
    * Callback to run after last subscriber unsubscribes
    * @returns false to keep the current store for any new subscribers instead of creating a new one
    */
-  onCleanup?: <T>(store: T) => boolean | undefined | void
+  onCleanup?: (store: T) => boolean | undefined | void
 }
 
 /**
@@ -64,7 +64,7 @@ export const createStoreSubscriber = <
   T extends (checkForUpdates: () => void) => any
 >(
   createStore: T,
-  options: CreateStoreSubscriberOptions = {}
+  options: CreateStoreSubscriberOptions<ReturnType<T>> = {}
 ): SubscribeFunction<ReturnType<T>> => {
   let store: ReturnType<T> | null
   const {
@@ -95,7 +95,7 @@ export const createStoreSubscriber = <
     const updatedPaths: string[] = []
     Object.entries(previouslyReadValues).forEach(([path, previousValue]) => {
       const currentValue = getPathValue(path)
-      if (hasChanged({ previousValue, currentValue, path, store })) {
+      if (store && hasChanged({ previousValue, currentValue, path, store })) {
         console.debug(
           `Path "${path}" changed from`,
           previousValue,
@@ -153,7 +153,7 @@ export const createStoreSubscriber = <
           obj[key] = newValue
           const prop = String(key)
           const path = parentPath ? `${parentPath}.${prop}` : prop
-          if (onSet({ store, path, key, obj }) ?? true) {
+          if (store && (onSet({ store, path, key, obj }) ?? true)) {
             checkForUpdates(
               `Setter at path "${path}" triggered check for updates`
             )
@@ -166,7 +166,10 @@ export const createStoreSubscriber = <
           const key = dotLastIndex > -1 ? path?.slice(dotLastIndex) : path
           // 'This' context will pretty much always be intended to be parent object and not the calling context
           const returnValue = func.apply(parent, args)
-          if (onMethodCall({ store, path, key, obj: parent }) ?? true) {
+          if (
+            store &&
+            (onMethodCall({ store, path, key, obj: parent }) ?? true)
+          ) {
             checkForUpdates(
               `Method call at path "${path}" triggered check for updates`
             )
