@@ -3,6 +3,36 @@
 // Make React dev dependency and optional peer dependency
 // Add support for other frameworks: Svelte, Vue, Lit
 // Cache nested proxies?
+// onRead?
+// Return something from checkForUpdates (true if update)?
+// Pass something to updater (what caused change)?
+
+// Partially modified version of https://www.typescriptlang.org/play?ts=4.1.0-pr-40336-88&ssl=23&ssc=13&pln=14&pc=1#code/FAFwngDgpgBACgQxACwJIFsIBsA8AVAGhgGkowYoAPEKAOwBMBnGAazIHsAzGPAPhgC8wGCTIVqdJjEYgATgEtaAc2EwA-DwDapMAF1xNBswBKUAMbtZ9HDIXKiCWmF6qRGgD4wABgBIA3joAvgB0-ogoGNj42mS6RACilGZYAK70UDhsYFxaOnGsHNyOYJq6vPwAZNJyikqBXq4iMJ6+AWQh-onJaRlZOXgxekR9RU6lldV2dQ1NMABcMLRQAG5QsqoLS6uyANzAoJCw4WiYWABM+PwC8EgnUYQF2dx8zY-9ewfQNyiXgt9351+VEMUlstVeIx46n+kUBLwWkLwH3AX2OADUEKkMg84AZJMxjpcrqpccD8d5-IpOGtRGAOn4qTTTDJ6qoNDo8UY3s9GhpmSBOVJCQM8i5Zm5-hisdE8kR+WLxZsVmtGkrtht4ILmIjeVo4LpVYtlbt9ulkghZLBOClaGYQPJ2LQYEooCB8ERSRIucLygAKdgAIwAVgsHhBbgs4ABKSO3KUpbEe3gfCy0GQwQNB8wC65+VSceSyGQAOQQ6CgCwARAAReRQJTsSsEVRYBAlssVmCVgASCAAXk3VAgXQsAMwABmbIggsnYWbtjAWmkafkWHarpgQLHkICbMFTNQDKRAlkXMAAbAAOGCBKdNVe0dddgDCjpkSCge4PCiPJ6LCwARjOG87wNQIYDbfc3xAD4XRAf1g2zIhKxnOds0YYJKyjHYgA
+type PathImpl<T, Key extends keyof T> = Key extends string
+  ? T[Key] extends Record<string, any>
+    ?
+        | `${Key}.${PathImpl<T[Key], Exclude<keyof T[Key], keyof any[]>> &
+            string}`
+        | `${Key}.${Exclude<keyof T[Key], keyof any[]> & string}`
+    : never
+  : never
+
+type PathImpl2<T> = PathImpl<T, keyof T> | (keyof T & string)
+
+export type Path<T> = PathImpl2<T> extends string | keyof T
+  ? PathImpl2<T>
+  : keyof T & string
+
+// Not used currently but keeping in case
+/* type PathValue<T, P extends Path<T>> = P extends `${infer Key}.${infer Rest}`
+  ? Key extends keyof T
+    ? Rest extends Path<T[Key]>
+      ? PathValue<T[Key], Rest>
+      : never
+    : never
+  : P extends keyof T
+  ? T[P]
+  : never */
 
 export type Updater = () => any
 
@@ -10,11 +40,13 @@ export type SubscribeFunction<T> = (
   updater: Updater
 ) => readonly [T, (debugStatement?: string) => void]
 
+type StoreCreator<T> = (checkForUpdates: () => void) => T
+
 interface CommonArgs<T> {
   /** A reference to the store object */
   store: T
   /** A representation of the property path for nested values (e.g. "state.someObject.someProperty") */
-  path: string
+  path: Path<T>
   /** The target object */
   obj: any
   /** The key for this setter/method */
@@ -22,7 +54,6 @@ interface CommonArgs<T> {
 }
 
 interface CreateStoreSubscriberOptions<T> {
-  // TODO: Add more robust typing
   /**
    * Check if a value should be considered as changed for the purpose of updating subscribers to that value
    * @returns True if should update subscribers, else false
@@ -33,7 +64,7 @@ interface CreateStoreSubscriberOptions<T> {
     /** The current value */
     currentValue: any
     /** A representation of the property path for nested values (e.g. "state.someObject.someProperty") */
-    path: string
+    path: Path<T>
     /** A reference to the store object */
     store: T
   }) => boolean
@@ -60,13 +91,11 @@ interface CreateStoreSubscriberOptions<T> {
  * @returns A function that, given an update function, will return both 1. a proxy that tracks reads and changes to values and 2. an unsubscribe function.
  * The passed updated function will be called whenever a value read from the proxy (nested values included) is changed via any proxy returned from this subscriber
  */
-export const createStoreSubscriber = <
-  T extends (checkForUpdates: () => void) => any
->(
-  createStore: T,
-  options: CreateStoreSubscriberOptions<ReturnType<T>> = {}
-): SubscribeFunction<ReturnType<T>> => {
-  let store: ReturnType<T> | null
+export const createStoreSubscriber = <T>(
+  createStore: StoreCreator<T>,
+  options: CreateStoreSubscriberOptions<T> = {}
+) => {
+  let store: T | null
   const {
     hasChanged = ({ previousValue, currentValue }) =>
       previousValue !== currentValue,
@@ -75,14 +104,14 @@ export const createStoreSubscriber = <
     onCleanup = () => true,
   } = options
   /** This records all tracked key paths and the last read value. A key path represents a path on the original store object (e.g. 'someState.someProp') */
-  const previouslyReadValues: Record<string, any> = {}
+  const previouslyReadValues: Partial<Record<Path<T>, any>> = {}
   /** This records all paths an updater is tracking for changes to */
-  const updaterToTrackedPathsMap = new Map<Updater, Set<string>>()
+  const updaterToWatchedPathsMap = new Map<Updater, Set<Path<T>>>()
   /** For keeping track of all unique updater instances */
   let totalUpdaters = 0
 
   /** Given a key path, return the value from the nested object */
-  const getPathValue = (path: string) => {
+  const getPathValue = (path: Path<T>) => {
     const props = path.split('.')
     let currentVal: any = store
     props.forEach((prop) => (currentVal = currentVal[prop]))
@@ -92,21 +121,24 @@ export const createStoreSubscriber = <
   /** Iterates through all tracked paths, checks for which ones changed, and calls any updater tracking a changed path value */
   const checkForUpdates = (debugStatement?: string) => {
     console.debug(debugStatement ?? 'Manual call triggered check for updates')
-    const updatedPaths: string[] = []
-    Object.entries(previouslyReadValues).forEach(([path, previousValue]) => {
-      const currentValue = getPathValue(path)
-      if (store && hasChanged({ previousValue, currentValue, path, store })) {
-        console.debug(
-          `Path "${path}" changed from`,
-          previousValue,
-          'to',
-          currentValue
-        )
-        updatedPaths.push(path)
-        previouslyReadValues[path] = currentValue
+    const updatedPaths: Path<T>[] = []
+    Object.entries(previouslyReadValues).forEach(
+      ([stringPath, previousValue]) => {
+        const path = stringPath as Path<T>
+        const currentValue = getPathValue(path)
+        if (store && hasChanged({ previousValue, currentValue, path, store })) {
+          console.debug(
+            `Path "${path}" changed from`,
+            previousValue,
+            'to',
+            currentValue
+          )
+          updatedPaths.push(path)
+          previouslyReadValues[path] = currentValue
+        }
       }
-    })
-    updaterToTrackedPathsMap.forEach((paths, updater) => {
+    )
+    updaterToWatchedPathsMap.forEach((paths, updater) => {
       if (Array.from(paths).some((path) => updatedPaths.includes(path))) {
         updater()
       }
@@ -117,27 +149,27 @@ export const createStoreSubscriber = <
   /** Given an updater, returns a proxy that watches for all read properties (including nested ones) and calls updater when any of the read properties change
    * and a function to unsubscribe the updater
    */
-  return (updater: Updater) => {
+  const subscribeFunction: SubscribeFunction<T> = (updater) => {
     if (!store) {
       store = createStore(checkForUpdates)
       console.debug('Created new store', store)
     }
 
     totalUpdaters++
-    const trackedKeys = new Set<string>()
-    updaterToTrackedPathsMap.set(updater, trackedKeys)
+    const watchedPaths = new Set<Path<T>>()
+    updaterToWatchedPathsMap.set(updater, watchedPaths)
 
-    const createProxy = (obj: any, parentPath?: string, parent?: any) =>
+    const createProxy = (obj: any, parentPath?: Path<T>, parent?: any) =>
       Proxy.revocable(obj, {
         get(obj, key) {
           let value = obj[key]
           const prop = String(key)
-          const path = parentPath ? `${parentPath}.${prop}` : prop
+          const path = (parentPath ? `${parentPath}.${prop}` : prop) as Path<T>
 
           if (key !== 'constructor') {
             previouslyReadValues[path] = value
             // Subscribe this instance to changes to this property
-            trackedKeys.add(path)
+            watchedPaths.add(path)
           }
 
           // This wraps objects and functions:
@@ -152,7 +184,7 @@ export const createStoreSubscriber = <
         set(obj, key, newValue) {
           obj[key] = newValue
           const prop = String(key)
-          const path = parentPath ? `${parentPath}.${prop}` : prop
+          const path = (parentPath ? `${parentPath}.${prop}` : prop) as Path<T>
           if (store && (onSet({ store, path, key, obj }) ?? true)) {
             checkForUpdates(
               `Setter at path "${path}" triggered check for updates`
@@ -161,9 +193,10 @@ export const createStoreSubscriber = <
           return true
         },
         apply(func, _, args) {
-          const path = parentPath ?? ''
+          // In order to reach the apply trap, need to have created a proxy from a parent object for this function, so parentPath is certain to exist
+          const path = parentPath!
           const dotLastIndex = path.lastIndexOf('.')
-          const key = dotLastIndex > -1 ? path?.slice(dotLastIndex) : path
+          const key = dotLastIndex > -1 ? path.slice(dotLastIndex) : path
           // 'This' context will pretty much always be intended to be parent object and not the calling context
           const returnValue = func.apply(parent, args)
           if (
@@ -183,12 +216,13 @@ export const createStoreSubscriber = <
     const unsubscribe = () => {
       revoke()
       totalUpdaters--
-      updaterToTrackedPathsMap.delete(updater)
+      updaterToWatchedPathsMap.delete(updater)
       if (!totalUpdaters && (onCleanup(store!) ?? true)) {
         console.debug('Deleting store', store)
         store = null
       }
     }
-    return [proxy as ReturnType<T>, unsubscribe] as const
+    return [proxy as T, unsubscribe] as const
   }
+  return subscribeFunction
 }

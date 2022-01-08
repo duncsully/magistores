@@ -90,7 +90,10 @@ const defaultState = {
 }
 const localStorageKey = 'state'
 export const subscribeToPersistedStore = createStoreSubscriber(() => ({
-  state: JSON.parse(localStorage.getItem(localStorageKey)!) ?? defaultState,
+  state:
+    (JSON.parse(
+      localStorage.getItem(localStorageKey)!
+    ) as typeof defaultState) ?? defaultState,
 
   setState(state: Partial<typeof defaultState>) {
     this.state = { ...this.state, ...state }

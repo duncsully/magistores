@@ -12,8 +12,6 @@ export const useStore = <T>(subscribe: SubscribeFunction<T>) => {
   // Proxy for store handles subscribing component to all properties it reads and calling updater when any of those change
   const [storeProxy, unsubscribe] = useMemo(
     () => subscribe(updater),
-    // storeArgs shouldn't be changed after first hook call, but it will probably be a new array each time, so don't track it
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [subscribe]
   )
 
