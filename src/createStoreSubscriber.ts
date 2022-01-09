@@ -3,8 +3,6 @@
 // Make React dev dependency and optional peer dependency
 // Add support for other frameworks: Svelte, Vue, Lit
 // Cache nested proxies?
-// onRead?
-// Return something from checkForUpdates (true if update)?
 // Pass something to updater (what caused change)?
 
 // Partially modified version of https://www.typescriptlang.org/play?ts=4.1.0-pr-40336-88&ssl=23&ssc=13&pln=14&pc=1#code/FAFwngDgpgBACgQxACwJIFsIBsA8AVAGhgGkowYoAPEKAOwBMBnGAazIHsAzGPAPhgC8wGCTIVqdJjEYgATgEtaAc2EwA-DwDapMAF1xNBswBKUAMbtZ9HDIXKiCWmF6qRGgD4wABgBIA3joAvgB0-ogoGNj42mS6RACilGZYAK70UDhsYFxaOnGsHNyOYJq6vPwAZNJyikqBXq4iMJ6+AWQh-onJaRlZOXgxekR9RU6lldV2dQ1NMABcMLRQAG5QsqoLS6uyANzAoJCw4WiYWABM+PwC8EgnUYQF2dx8zY-9ewfQNyiXgt9351+VEMUlstVeIx46n+kUBLwWkLwH3AX2OADUEKkMg84AZJMxjpcrqpccD8d5-IpOGtRGAOn4qTTTDJ6qoNDo8UY3s9GhpmSBOVJCQM8i5Zm5-hisdE8kR+WLxZsVmtGkrtht4ILmIjeVo4LpVYtlbt9ulkghZLBOClaGYQPJ2LQYEooCB8ERSRIucLygAKdgAIwAVgsHhBbgs4ABKSO3KUpbEe3gfCy0GQwQNB8wC65+VSceSyGQAOQQ6CgCwARAAReRQJTsSsEVRYBAlssVmCVgASCAAXk3VAgXQsAMwABmbIggsnYWbtjAWmkafkWHarpgQLHkICbMFTNQDKRAlkXMAAbAAOGCBKdNVe0dddgDCjpkSCge4PCiPJ6LCwARjOG87wNQIYDbfc3xAD4XRAf1g2zIhKxnOds0YYJKyjHYgA
@@ -40,7 +38,7 @@ export type SubscribeFunction<T> = (
   updater: Updater
 ) => readonly [T, (debugStatement?: string) => void]
 
-type StoreCreator<T> = (checkForUpdates: () => void) => T
+type StoreCreator<T> = (checkForUpdates: () => number) => T
 
 interface CommonArgs<T> {
   /** A reference to the store object */
@@ -52,6 +50,9 @@ interface CommonArgs<T> {
   /** The key for this setter/method */
   key: string | symbol
 }
+
+/** When true or false should assert specific behaviors but a nullish value should defer to default behaviors */
+type ternary = boolean | undefined | null
 
 interface CreateStoreSubscriberOptions<T> {
   /**
@@ -69,20 +70,25 @@ interface CreateStoreSubscriberOptions<T> {
     store: T
   }) => boolean
   /**
+   * Callback to run during getter
+   * @returns false if shouldn't track this path
+   */
+  onGet?: (args: CommonArgs<T>) => ternary
+  /**
    * Callback to run after setter
    * @returns false if shouldn't check for updates
    */
-  onSet?: (args: CommonArgs<T>) => boolean | undefined | void
+  onSet?: (args: CommonArgs<T>) => ternary
   /**
    * Callback to run after method call
    * @returns false if shouldn't check for updates
    */
-  onMethodCall?: (args: CommonArgs<T>) => boolean | undefined | void
+  onMethodCall?: (args: CommonArgs<T>) => ternary
   /**
    * Callback to run after last subscriber unsubscribes
    * @returns false to keep the current store for any new subscribers instead of creating a new one
    */
-  onCleanup?: (store: T) => boolean | undefined | void
+  onCleanup?: (store: T) => ternary
 }
 
 /**
@@ -99,9 +105,10 @@ export const createStoreSubscriber = <T>(
   const {
     hasChanged = ({ previousValue, currentValue }) =>
       previousValue !== currentValue,
-    onSet = () => true,
-    onMethodCall = () => true,
-    onCleanup = () => true,
+    onGet,
+    onSet,
+    onMethodCall,
+    onCleanup,
   } = options
   /** This records all tracked key paths and the last read value. A key path represents a path on the original store object (e.g. 'someState.someProp') */
   const previouslyReadValues: Partial<Record<Path<T>, any>> = {}
@@ -114,14 +121,16 @@ export const createStoreSubscriber = <T>(
   const getPathValue = (path: Path<T>) => {
     const props = path.split('.')
     let currentVal: any = store
-    props.forEach((prop) => (currentVal = currentVal[prop]))
+    props.forEach(prop => (currentVal = currentVal[prop]))
     return currentVal
   }
 
   /** Iterates through all tracked paths, checks for which ones changed, and calls any updater tracking a changed path value */
-  const checkForUpdates = (debugStatement?: string) => {
-    console.debug(debugStatement ?? 'Manual call triggered check for updates')
-    const updatedPaths: Path<T>[] = []
+  const checkForUpdates = (
+    debugStatement = 'Manual call triggered check for updates'
+  ) => {
+    console.debug(debugStatement)
+    const updatedPaths = new Set<Path<T>>()
     Object.entries(previouslyReadValues).forEach(
       ([stringPath, previousValue]) => {
         const path = stringPath as Path<T>
@@ -133,23 +142,29 @@ export const createStoreSubscriber = <T>(
             'to',
             currentValue
           )
-          updatedPaths.push(path)
+          updatedPaths.add(path)
           previouslyReadValues[path] = currentValue
         }
       }
     )
+    let updated = 0
     updaterToWatchedPathsMap.forEach((paths, updater) => {
-      if (Array.from(paths).some((path) => updatedPaths.includes(path))) {
+      if (Array.from(paths).some(path => updatedPaths.has(path))) {
+        updated++
         updater()
       }
     })
-    console.debug('Finished checking for updates')
+    console.debug(
+      'Finished checking for updates. Subscribers updated:',
+      updated
+    )
+    return updated
   }
 
   /** Given an updater, returns a proxy that watches for all read properties (including nested ones) and calls updater when any of the read properties change
    * and a function to unsubscribe the updater
    */
-  const subscribeFunction: SubscribeFunction<T> = (updater) => {
+  const subscribeFunction: SubscribeFunction<T> = updater => {
     if (!store) {
       store = createStore(checkForUpdates)
       console.debug('Created new store', store)
@@ -166,10 +181,17 @@ export const createStoreSubscriber = <T>(
           const prop = String(key)
           const path = (parentPath ? `${parentPath}.${prop}` : prop) as Path<T>
 
-          if (key !== 'constructor') {
+          if (
+            key !== 'constructor' &&
+            store &&
+            onGet?.({ store, path, key, obj }) !== false
+          ) {
             previouslyReadValues[path] = value
             // Subscribe this instance to changes to this property
             watchedPaths.add(path)
+          } else {
+            delete previouslyReadValues[path]
+            watchedPaths.delete(path)
           }
 
           // This wraps objects and functions:
@@ -185,7 +207,7 @@ export const createStoreSubscriber = <T>(
           obj[key] = newValue
           const prop = String(key)
           const path = (parentPath ? `${parentPath}.${prop}` : prop) as Path<T>
-          if (store && (onSet({ store, path, key, obj }) ?? true)) {
+          if (store && onSet?.({ store, path, key, obj }) !== false) {
             checkForUpdates(
               `Setter at path "${path}" triggered check for updates`
             )
@@ -201,7 +223,7 @@ export const createStoreSubscriber = <T>(
           const returnValue = func.apply(parent, args)
           if (
             store &&
-            (onMethodCall({ store, path, key, obj: parent }) ?? true)
+            onMethodCall?.({ store, path, key, obj: parent }) !== false
           ) {
             checkForUpdates(
               `Method call at path "${path}" triggered check for updates`
@@ -217,7 +239,7 @@ export const createStoreSubscriber = <T>(
       revoke()
       totalUpdaters--
       updaterToWatchedPathsMap.delete(updater)
-      if (!totalUpdaters && (onCleanup(store!) ?? true)) {
+      if (!totalUpdaters && onCleanup?.(store!) !== false) {
         console.debug('Deleting store', store)
         store = null
       }

@@ -229,23 +229,50 @@ describe('createStoreSubscriber', () => {
   })
 
   it('can manually update via the first parameter in the store creator', () => {
-    const obj = { test: 3, update: () => {} }
-    const subscribe = createStoreSubscriber((update) => {
-      obj.update = update
-      return obj
-    })
+    const subscribe = createStoreSubscriber(
+      update => ({
+        test: 3,
+        update,
+      }),
+      {
+        onSet: () => false,
+        onMethodCall: () => false,
+      }
+    )
 
     const updater = jest.fn()
     const [instance] = subscribe(updater)
 
     read(instance.test)
-    obj.test = 4
+    instance.test = 4
 
     expect(updater).not.toHaveBeenCalled()
 
-    obj.update()
+    instance.update()
 
     expect(updater).toHaveBeenCalled()
+  })
+
+  it('returns the number of subscribers updated from checkForUpdate argument', () => {
+    const subscribe = createStoreSubscriber(
+      update => ({
+        test: 3,
+        update,
+      }),
+      {
+        onSet: () => false,
+        onMethodCall: () => false,
+      }
+    )
+
+    const [instanceOne] = subscribe(jest.fn())
+    const [instanceTwo] = subscribe(jest.fn())
+    const [instanceThree] = subscribe(jest.fn())
+
+    read(instanceOne.test, instanceThree.test)
+    instanceTwo.test = 2
+
+    expect(instanceTwo.update()).toBe(2)
   })
 
   describe('options', () => {
@@ -291,6 +318,50 @@ describe('createStoreSubscriber', () => {
         instance.test = [1, 3]
 
         expect(updater).toHaveBeenCalled()
+      })
+    })
+
+    describe('onGet', () => {
+      it('does not track path if returning false', () => {
+        const subscribe = createStoreSubscriber(
+          () => ({
+            test: 'hi',
+          }),
+          {
+            onGet: ({ key }) => key !== 'test',
+          }
+        )
+        const updater = jest.fn()
+        const [instance] = subscribe(updater)
+
+        read(instance.test)
+        instance.test = 'useless'
+
+        expect(updater).not.toHaveBeenCalled()
+      })
+
+      it('stops tracking a previously tracked path if returning false', () => {
+        let i = 0
+        const subscribe = createStoreSubscriber(
+          () => ({
+            test: 'hi',
+          }),
+          {
+            onGet: () => i++ < 1,
+          }
+        )
+        const updater = jest.fn()
+        const [instance] = subscribe(updater)
+
+        read(instance.test)
+        instance.test = 'still works'
+
+        expect(updater).toHaveBeenCalled()
+
+        read(instance.test)
+        instance.test = 'borked'
+
+        expect(updater).not.toHaveBeenCalledTimes(2)
       })
     })
 
