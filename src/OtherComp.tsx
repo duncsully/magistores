@@ -11,7 +11,7 @@ export const OtherComp = () => {
       <p>Is this synced? {store.test}</p>
       <input
         value={store.thing}
-        onChange={(e) => (store.thing = e.target.value)}
+        onChange={e => (store.thing = e.target.value)}
       />
       <p>{store.thing}</p>
     </UpdatingBorder>

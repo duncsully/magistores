@@ -7,7 +7,7 @@ import { SubscribeFunction } from './createStoreSubscriber'
 export const useStore = <T>(subscribe: SubscribeFunction<T>) => {
   // Note that while in React dev mode, you'll see two updaters per subscription. This isn't a problem in production mode.
   // Triggers rerender when called
-  const [, updater] = useReducer((x) => x + 1, 0)
+  const [, updater] = useReducer(x => x + 1, 0)
 
   // Proxy for store handles subscribing component to all properties it reads and calling updater when any of those change
   const [storeProxy, unsubscribe] = useMemo(
