@@ -2,11 +2,11 @@ import React, { useEffect } from 'react'
 import { render, screen } from '@testing-library/react'
 import { useStore } from './useStore'
 import userEvent from '@testing-library/user-event'
-import { createStoreSubscriber } from './createStoreSubscriber'
+import { createStoreSubscriptionAdder } from './createStoreSubscriptionAdder'
 
 describe('useStore', () => {
   it('can be used with simple stores', () => {
-    const testStore = createStoreSubscriber(() => ({
+    const testStore = createStoreSubscriptionAdder(() => ({
       test: 'hi',
       setTest(newTest: string) {
         this.test = newTest
@@ -15,7 +15,7 @@ describe('useStore', () => {
 
     const TestComponentOne = () => {
       const { test, setTest } = useStore(testStore)
-      return <input value={test} onChange={(e) => setTest(e.target.value)} />
+      return <input value={test} onChange={e => setTest(e.target.value)} />
     }
 
     let rerendered = 0

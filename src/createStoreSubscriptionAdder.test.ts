@@ -1,11 +1,11 @@
-import { createStoreSubscriber } from './createStoreSubscriber'
+import { createStoreSubscriptionAdder } from './createStoreSubscriptionAdder'
 
 /** Just a noop to read values */
 const read = (...args: any[]) => args
 
-describe('createStoreSubscriber', () => {
+describe('createStoreSubscriptionAdder', () => {
   it('calls updaters when a read property changes', () => {
-    const subscribe = createStoreSubscriber(() => ({
+    const subscribe = createStoreSubscriptionAdder(() => ({
       test: 1,
       thing: 'hello',
       setTest(newTest: number) {
@@ -35,7 +35,7 @@ describe('createStoreSubscriber', () => {
   })
 
   it('works with nested objects', () => {
-    const subscribe = createStoreSubscriber(() => ({
+    const subscribe = createStoreSubscriptionAdder(() => ({
       state: {
         test: 1,
       },
@@ -63,7 +63,7 @@ describe('createStoreSubscriber', () => {
   })
 
   it('works when a parent store updates child properties', () => {
-    const subscribe = createStoreSubscriber(() => ({
+    const subscribe = createStoreSubscriptionAdder(() => ({
       state: {
         test: 1,
       },
@@ -86,7 +86,7 @@ describe('createStoreSubscriber', () => {
   })
 
   it('works when parent properties depend on child properties', () => {
-    const subscribe = createStoreSubscriber(() => ({
+    const subscribe = createStoreSubscriptionAdder(() => ({
       state: {
         test: {
           thing: 1,
@@ -115,7 +115,7 @@ describe('createStoreSubscriber', () => {
 
   it('works with stores accessing outside variables', () => {
     let test = 1
-    const subscribe = createStoreSubscriber(() => ({
+    const subscribe = createStoreSubscriptionAdder(() => ({
       get test() {
         return test
       },
@@ -159,7 +159,7 @@ describe('createStoreSubscriber', () => {
         this._test = newTest
       }
     }
-    const subscribe = createStoreSubscriber(() => new TestStore())
+    const subscribe = createStoreSubscriptionAdder(() => new TestStore())
 
     const updaterOne = jest.fn()
     const [instanceOne] = subscribe(updaterOne)
@@ -196,7 +196,7 @@ describe('createStoreSubscriber', () => {
       }
     }
 
-    const subscribe = createStoreSubscriber(() => TestStore)
+    const subscribe = createStoreSubscriptionAdder(() => TestStore)
 
     const updaterOne = jest.fn()
     const [instanceOne] = subscribe(updaterOne)
@@ -212,7 +212,7 @@ describe('createStoreSubscriber', () => {
   })
 
   it('initializes a new store on first subscriber', () => {
-    const subscribe = createStoreSubscriber(() => ({
+    const subscribe = createStoreSubscriptionAdder(() => ({
       test: 5,
     }))
 
@@ -229,7 +229,7 @@ describe('createStoreSubscriber', () => {
   })
 
   it('can manually update via the first parameter in the store creator', () => {
-    const subscribe = createStoreSubscriber(
+    const subscribe = createStoreSubscriptionAdder(
       update => ({
         test: 3,
         update,
@@ -254,7 +254,7 @@ describe('createStoreSubscriber', () => {
   })
 
   it('returns the number of subscribers updated from checkForUpdate argument', () => {
-    const subscribe = createStoreSubscriber(
+    const subscribe = createStoreSubscriptionAdder(
       update => ({
         test: 3,
         update,
@@ -278,7 +278,7 @@ describe('createStoreSubscriber', () => {
   describe('options', () => {
     describe('onCleanup', () => {
       it('reuses existing store if returning false', () => {
-        const subscribe = createStoreSubscriber(
+        const subscribe = createStoreSubscriptionAdder(
           () => ({
             test: 5,
           }),
@@ -300,12 +300,15 @@ describe('createStoreSubscriber', () => {
 
     describe('hasChanged', () => {
       it('allows specifying custom check for updating', () => {
-        const subscribe = createStoreSubscriber(() => ({ test: [1, 2] }), {
-          hasChanged: ({ previousValue, currentValue }) =>
-            previousValue.some(
-              (val: any, i: number) => val !== currentValue[i]
-            ),
-        })
+        const subscribe = createStoreSubscriptionAdder(
+          () => ({ test: [1, 2] }),
+          {
+            hasChanged: ({ previousValue, currentValue }) =>
+              previousValue.some(
+                (val: any, i: number) => val !== currentValue[i]
+              ),
+          }
+        )
 
         const updater = jest.fn()
         const [instance] = subscribe(updater)
@@ -323,7 +326,7 @@ describe('createStoreSubscriber', () => {
 
     describe('onGet', () => {
       it('does not track path if returning false', () => {
-        const subscribe = createStoreSubscriber(
+        const subscribe = createStoreSubscriptionAdder(
           () => ({
             test: 'hi',
           }),
@@ -342,7 +345,7 @@ describe('createStoreSubscriber', () => {
 
       it('stops tracking a previously tracked path if returning false', () => {
         let i = 0
-        const subscribe = createStoreSubscriber(
+        const subscribe = createStoreSubscriptionAdder(
           () => ({
             test: 'hi',
           }),
@@ -367,7 +370,7 @@ describe('createStoreSubscriber', () => {
 
     describe('onSet', () => {
       it('does not check for updates if returning false', () => {
-        const subscribe = createStoreSubscriber(
+        const subscribe = createStoreSubscriptionAdder(
           () => ({
             test: 'hi',
             state: {
@@ -394,7 +397,7 @@ describe('createStoreSubscriber', () => {
 
     describe('onMethodCall', () => {
       it('does not check for updates if returning false', () => {
-        const subscribe = createStoreSubscriber(
+        const subscribe = createStoreSubscriptionAdder(
           () => ({
             test: {
               nested: 'hi',

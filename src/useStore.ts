@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useReducer } from 'react'
-import { SubscribeFunction } from './createStoreSubscriber'
+import { SubscribeFunction } from './createStoreSubscriptionAdder'
 
-/** A hook for handling subscribing a React component to a store created with createStoreSubscriber
- * @param subscribe - The subscribe function returned from createStoreSubscriber
+/**
+ * A hook for handling subscribing a React component to a store created with @see {@link createStoreSubscriptionAdder}
+ * @param subscribe - The subscribe function returned from @see {@link createStoreSubscriptionAdder}
+ * @returns - An instance of the store that will track reads and automatically rerender if any read value changes
  */
 export const useStore = <T>(subscribe: SubscribeFunction<T>) => {
-  // Note that while in React dev mode, you'll see two updaters per subscription. This isn't a problem in production mode.
-  // Triggers rerender when called
-  const [, updater] = useReducer(x => x + 1, 0)
+  // Note that while in React dev mode, you'll see two rerender functions per subscription. This isn't a problem in production mode.
+  const [, rerender] = useReducer(x => x + 1, 0)
 
-  // Proxy for store handles subscribing component to all properties it reads and calling updater when any of those change
+  // Proxy for store handles subscribing component to all properties it reads and calling updateHandler when any of those change
   const [storeProxy, unsubscribe] = useMemo(
-    () => subscribe(updater),
+    () => subscribe(rerender),
     [subscribe]
   )
 

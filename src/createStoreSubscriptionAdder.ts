@@ -3,7 +3,8 @@
 // Make React dev dependency and optional peer dependency
 // Add support for other frameworks: Svelte, Vue, Lit
 // Cache nested proxies?
-// Pass something to updater (what caused change)?
+// Pass something to updateHandler (what caused change)?
+// Look into useSyncExternalStore - need a way to generate a stable snapshot?
 
 // Partially modified version of https://www.typescriptlang.org/play?ts=4.1.0-pr-40336-88&ssl=23&ssc=13&pln=14&pc=1#code/FAFwngDgpgBACgQxACwJIFsIBsA8AVAGhgGkowYoAPEKAOwBMBnGAazIHsAzGPAPhgC8wGCTIVqdJjEYgATgEtaAc2EwA-DwDapMAF1xNBswBKUAMbtZ9HDIXKiCWmF6qRGgD4wABgBIA3joAvgB0-ogoGNj42mS6RACilGZYAK70UDhsYFxaOnGsHNyOYJq6vPwAZNJyikqBXq4iMJ6+AWQh-onJaRlZOXgxekR9RU6lldV2dQ1NMABcMLRQAG5QsqoLS6uyANzAoJCw4WiYWABM+PwC8EgnUYQF2dx8zY-9ewfQNyiXgt9351+VEMUlstVeIx46n+kUBLwWkLwH3AX2OADUEKkMg84AZJMxjpcrqpccD8d5-IpOGtRGAOn4qTTTDJ6qoNDo8UY3s9GhpmSBOVJCQM8i5Zm5-hisdE8kR+WLxZsVmtGkrtht4ILmIjeVo4LpVYtlbt9ulkghZLBOClaGYQPJ2LQYEooCB8ERSRIucLygAKdgAIwAVgsHhBbgs4ABKSO3KUpbEe3gfCy0GQwQNB8wC65+VSceSyGQAOQQ6CgCwARAAReRQJTsSsEVRYBAlssVmCVgASCAAXk3VAgXQsAMwABmbIggsnYWbtjAWmkafkWHarpgQLHkICbMFTNQDKRAlkXMAAbAAOGCBKdNVe0dddgDCjpkSCge4PCiPJ6LCwARjOG87wNQIYDbfc3xAD4XRAf1g2zIhKxnOds0YYJKyjHYgA
 type PathImpl<T, Key extends keyof T> = Key extends string
@@ -32,10 +33,10 @@ export type Path<T> = PathImpl2<T> extends string | keyof T
   ? T[P]
   : never */
 
-export type Updater = () => any
+export type UpdateHandler = () => any
 
 export type SubscribeFunction<T> = (
-  updater: Updater
+  updateHanlder: UpdateHandler
 ) => readonly [T, (debugStatement?: string) => void]
 
 type StoreCreator<T> = (checkForUpdates: () => number) => T
@@ -54,7 +55,7 @@ interface CommonArgs<T> {
 /** When true or false should assert specific behaviors but a nullish value should defer to default behaviors */
 type ternary = boolean | undefined | null
 
-interface CreateStoreSubscriberOptions<T> {
+interface CreateStoreSubscriptionAdderOptions<T> {
   /**
    * Check if a value should be considered as changed for the purpose of updating subscribers to that value
    * @returns True if should update subscribers, else false
@@ -92,14 +93,14 @@ interface CreateStoreSubscriberOptions<T> {
 }
 
 /**
- * Creates a subscribe function for the given store object
+ * Creates a function for subscribing to the given store object
  * @param createStore A function that returns a store object to watch for changes on, will be called whenever there is a first subscriber
- * @returns A function that, given an update function, will return both 1. a proxy that tracks reads and changes to values and 2. an unsubscribe function.
- * The passed updated function will be called whenever a value read from the proxy (nested values included) is changed via any proxy returned from this subscriber
+ * @returns A function that, given an update handler function, will return both 1. a proxy that tracks reads and changes to values and 2. an unsubscribe function.
+ * The passed update handler function will be called whenever a value read from the proxy (nested values included) is changed via any proxy returned from this storeSubscriptionAdder
  */
-export const createStoreSubscriber = <T>(
+export const createStoreSubscriptionAdder = <T>(
   createStore: StoreCreator<T>,
-  options: CreateStoreSubscriberOptions<T> = {}
+  options: CreateStoreSubscriptionAdderOptions<T> = {}
 ) => {
   let store: T | null
   const {
@@ -112,10 +113,10 @@ export const createStoreSubscriber = <T>(
   } = options
   /** This records all tracked key paths and the last read value. A key path represents a path on the original store object (e.g. 'someState.someProp') */
   const previouslyReadValues: Partial<Record<Path<T>, any>> = {}
-  /** This records all paths an updater is tracking for changes to */
-  const updaterToWatchedPathsMap = new Map<Updater, Set<Path<T>>>()
-  /** For keeping track of all unique updater instances */
-  let totalUpdaters = 0
+  /** This records all paths an updateHandler is tracking for changes to */
+  const updateHandlerToWatchedPathsMap = new Map<UpdateHandler, Set<Path<T>>>()
+  /** For keeping track of all unique updateHandler instances */
+  let totalupdateHandlers = 0
 
   /** Given a key path, return the value from the nested object */
   const getPathValue = (path: Path<T>) => {
@@ -125,7 +126,7 @@ export const createStoreSubscriber = <T>(
     return currentVal
   }
 
-  /** Iterates through all tracked paths, checks for which ones changed, and calls any updater tracking a changed path value */
+  /** Iterates through all tracked paths, checks for which ones changed, and calls any updateHandler tracking a changed path value */
   const checkForUpdates = (
     debugStatement = 'Manual call triggered check for updates'
   ) => {
@@ -148,10 +149,10 @@ export const createStoreSubscriber = <T>(
       }
     )
     let updated = 0
-    updaterToWatchedPathsMap.forEach((paths, updater) => {
+    updateHandlerToWatchedPathsMap.forEach((paths, updateHandler) => {
       if (Array.from(paths).some(path => updatedPaths.has(path))) {
         updated++
-        updater()
+        updateHandler()
       }
     })
     console.debug(
@@ -161,18 +162,20 @@ export const createStoreSubscriber = <T>(
     return updated
   }
 
-  /** Given an updater, returns a proxy that watches for all read properties (including nested ones) and calls updater when any of the read properties change
-   * and a function to unsubscribe the updater
+  /**
+   * Given an updateHandler, returns:
+   * 1. A proxy that watches for all read properties (including nested ones) and calls updateHandler when any of the read properties change
+   * 2. A function to unsubscribe the updateHandler
    */
-  const subscribeFunction: SubscribeFunction<T> = updater => {
+  const subscribeToStore: SubscribeFunction<T> = updateHandler => {
     if (!store) {
       store = createStore(checkForUpdates)
       console.debug('Created new store', store)
     }
 
-    totalUpdaters++
+    totalupdateHandlers++
     const watchedPaths = new Set<Path<T>>()
-    updaterToWatchedPathsMap.set(updater, watchedPaths)
+    updateHandlerToWatchedPathsMap.set(updateHandler, watchedPaths)
 
     const createProxy = (obj: any, parentPath?: Path<T>, parent?: any) =>
       Proxy.revocable(obj, {
@@ -237,14 +240,14 @@ export const createStoreSubscriber = <T>(
 
     const unsubscribe = () => {
       revoke()
-      totalUpdaters--
-      updaterToWatchedPathsMap.delete(updater)
-      if (!totalUpdaters && onCleanup?.(store!) !== false) {
+      totalupdateHandlers--
+      updateHandlerToWatchedPathsMap.delete(updateHandler)
+      if (!totalupdateHandlers && onCleanup?.(store!) !== false) {
         console.debug('Deleting store', store)
         store = null
       }
     }
     return [proxy as T, unsubscribe] as const
   }
-  return subscribeFunction
+  return subscribeToStore
 }

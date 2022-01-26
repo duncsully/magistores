@@ -1,6 +1,6 @@
-import { createStoreSubscriber } from './createStoreSubscriber'
+import { createStoreSubscriptionAdder } from './createStoreSubscriptionAdder'
 
-export const subscribeToTestStore = createStoreSubscriber(() => ({
+export const subscribeToTestStore = createStoreSubscriptionAdder(() => ({
   test: 'dude',
   thing: 'great',
   setTest(newValue: string) {
@@ -11,39 +11,43 @@ export const subscribeToTestStore = createStoreSubscriber(() => ({
   },
 }))
 
-export const subscribeToStateAndActionsStore = createStoreSubscriber(() => ({
-  state: {
-    test: 'dude',
-    thing: 'great',
-  },
+export const subscribeToStateAndActionsStore = createStoreSubscriptionAdder(
+  () => ({
+    state: {
+      test: 'dude',
+      thing: 'great',
+    },
 
-  setTest(test: string) {
-    this.state = { ...this.state, test }
-  },
-  setThing(thing: string) {
-    this.state = { ...this.state, thing }
-  },
-}))
+    setTest(test: string) {
+      this.state = { ...this.state, test }
+    },
+    setThing(thing: string) {
+      this.state = { ...this.state, thing }
+    },
+  })
+)
 
 let _test = 'Awesome'
 let _thing = 'Cool'
-export const subscribeToGettersAndMethodsStore = createStoreSubscriber(() => ({
-  get test() {
-    return _test
-  },
-  get thing() {
-    return _thing
-  },
-  set thing(thing: string) {
-    _thing = thing
-  },
-  setTest(test: string) {
-    _test = test
-  },
-  setThing(thing: string) {
-    _thing = thing
-  },
-}))
+export const subscribeToGettersAndMethodsStore = createStoreSubscriptionAdder(
+  () => ({
+    get test() {
+      return _test
+    },
+    get thing() {
+      return _thing
+    },
+    set thing(thing: string) {
+      _thing = thing
+    },
+    setTest(test: string) {
+      _test = test
+    },
+    setThing(thing: string) {
+      _thing = thing
+    },
+  })
+)
 
 class ClassStore {
   get test() {
@@ -67,7 +71,7 @@ class ClassStore {
   #test = 'Classy'
   #thing = 'Sassy'
 }
-export const subscribeToClassStore = createStoreSubscriber(
+export const subscribeToClassStore = createStoreSubscriptionAdder(
   () => new ClassStore()
 )
 
@@ -82,14 +86,16 @@ class StaticStore {
   }
 }
 
-export const subscribeToStaticStore = createStoreSubscriber(() => StaticStore)
+export const subscribeToStaticStore = createStoreSubscriptionAdder(
+  () => StaticStore
+)
 
 const defaultState = {
   test: 'Persisted',
   thing: 'State',
 }
 const localStorageKey = 'state'
-export const subscribeToPersistedStore = createStoreSubscriber(() => ({
+export const subscribeToPersistedStore = createStoreSubscriptionAdder(() => ({
   state:
     (JSON.parse(
       localStorage.getItem(localStorageKey)!
@@ -172,6 +178,6 @@ class TestHistoryStore extends HistoryStore<{ test: string; thing: string }> {
   }
 }
 
-export const subscribeToHistoryStore = createStoreSubscriber(
+export const subscribeToHistoryStore = createStoreSubscriptionAdder(
   () => new TestHistoryStore()
 )
