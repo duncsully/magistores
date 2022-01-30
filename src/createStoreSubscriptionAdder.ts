@@ -4,7 +4,7 @@
 // Add support for other frameworks: Svelte, Vue, Lit
 // Cache nested proxies?
 // Pass something to updateHandler (what caused change)?
-// Look into useSyncExternalStore - need a way to generate a stable snapshot?
+// Look into useSyncExternalStore - need a way to generate a stable snapshot? Return array of path values?
 
 // Partially modified version of https://www.typescriptlang.org/play?ts=4.1.0-pr-40336-88&ssl=23&ssc=13&pln=14&pc=1#code/FAFwngDgpgBACgQxACwJIFsIBsA8AVAGhgGkowYoAPEKAOwBMBnGAazIHsAzGPAPhgC8wGCTIVqdJjEYgATgEtaAc2EwA-DwDapMAF1xNBswBKUAMbtZ9HDIXKiCWmF6qRGgD4wABgBIA3joAvgB0-ogoGNj42mS6RACilGZYAK70UDhsYFxaOnGsHNyOYJq6vPwAZNJyikqBXq4iMJ6+AWQh-onJaRlZOXgxekR9RU6lldV2dQ1NMABcMLRQAG5QsqoLS6uyANzAoJCw4WiYWABM+PwC8EgnUYQF2dx8zY-9ewfQNyiXgt9351+VEMUlstVeIx46n+kUBLwWkLwH3AX2OADUEKkMg84AZJMxjpcrqpccD8d5-IpOGtRGAOn4qTTTDJ6qoNDo8UY3s9GhpmSBOVJCQM8i5Zm5-hisdE8kR+WLxZsVmtGkrtht4ILmIjeVo4LpVYtlbt9ulkghZLBOClaGYQPJ2LQYEooCB8ERSRIucLygAKdgAIwAVgsHhBbgs4ABKSO3KUpbEe3gfCy0GQwQNB8wC65+VSceSyGQAOQQ6CgCwARAAReRQJTsSsEVRYBAlssVmCVgASCAAXk3VAgXQsAMwABmbIggsnYWbtjAWmkafkWHarpgQLHkICbMFTNQDKRAlkXMAAbAAOGCBKdNVe0dddgDCjpkSCge4PCiPJ6LCwARjOG87wNQIYDbfc3xAD4XRAf1g2zIhKxnOds0YYJKyjHYgA
 type PathImpl<T, Key extends keyof T> = Key extends string
@@ -69,7 +69,7 @@ interface CreateStoreSubscriptionAdderOptions<T> {
     path: Path<T>
     /** A reference to the store object */
     store: T
-  }) => boolean
+  }) => ternary
   /**
    * Callback to run during getter
    * @returns false if shouldn't track this path
@@ -103,14 +103,7 @@ export const createStoreSubscriptionAdder = <T>(
   options: CreateStoreSubscriptionAdderOptions<T> = {}
 ) => {
   let store: T | null
-  const {
-    hasChanged = ({ previousValue, currentValue }) =>
-      previousValue !== currentValue,
-    onGet,
-    onSet,
-    onMethodCall,
-    onCleanup,
-  } = options
+  const { hasChanged, onGet, onSet, onMethodCall, onCleanup } = options
   /** This records all tracked key paths and the last read value. A key path represents a path on the original store object (e.g. 'someState.someProp') */
   const previouslyReadValues: Partial<Record<Path<T>, any>> = {}
   /** This records all paths an updateHandler is tracking for changes to */
@@ -136,7 +129,11 @@ export const createStoreSubscriptionAdder = <T>(
       ([stringPath, previousValue]) => {
         const path = stringPath as Path<T>
         const currentValue = getPathValue(path)
-        if (store && hasChanged({ previousValue, currentValue, path, store })) {
+        if (
+          (store &&
+            hasChanged?.({ previousValue, currentValue, path, store })) ??
+          !Object.is(previousValue, currentValue)
+        ) {
           console.debug(
             `Path "${path}" changed from`,
             previousValue,
@@ -170,6 +167,9 @@ export const createStoreSubscriptionAdder = <T>(
   const subscribeToStore: SubscribeFunction<T> = updateHandler => {
     if (!store) {
       store = createStore(checkForUpdates)
+      if (store !== Object(store)) {
+        throw Error('Value returned was not an object')
+      }
       console.debug('Created new store', store)
     }
 
