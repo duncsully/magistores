@@ -90,41 +90,57 @@ export const subscribeToStaticStore = createStoreSubscriptionAdder(
   () => StaticStore
 )
 
-const defaultState = {
-  test: 'Persisted',
-  thing: 'State',
+export class PersistedStore<T> {
+  constructor(private _key: string, defaultState: T) {
+    const localStorageState = JSON.parse(localStorage.getItem(_key)!) as T
+    this._state = localStorageState ?? defaultState
+  }
+
+  get state() {
+    return this._state
+  }
+
+  setState(stateChanges: Partial<T>) {
+    this._state = { ...this._state, ...stateChanges }
+    localStorage.setItem(this._key, JSON.stringify(this._state))
+  }
+
+  protected _state: T
 }
-const localStorageKey = 'state'
-export const subscribeToPersistedStore = createStoreSubscriptionAdder(() => ({
-  state:
-    (JSON.parse(
-      localStorage.getItem(localStorageKey)!
-    ) as typeof defaultState) ?? defaultState,
 
-  setState(state: Partial<typeof defaultState>) {
-    this.state = { ...this.state, ...state }
-    localStorage.setItem(localStorageKey, JSON.stringify(this.state))
-  },
-
+class PersistedStoreExample extends PersistedStore<{
+  test: string
+  thing: string
+}> {
+  constructor() {
+    super('state', {
+      test: 'Persisted',
+      thing: 'State',
+    })
+  }
   get test() {
     return this.state.test
-  },
+  }
 
   get thing() {
     return this.state.thing
-  },
+  }
   set thing(thing: string) {
     this.setState({ thing })
-  },
+  }
 
   setTest(test: string) {
     this.setState({ test })
-  },
+  }
 
   setThing(thing: string) {
     this.setState({ thing })
-  },
-}))
+  }
+}
+
+export const subscribeToPersistedStore = createStoreSubscriptionAdder(
+  () => new PersistedStoreExample()
+)
 
 abstract class HistoryStore<T> {
   protected abstract _state: T
