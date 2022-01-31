@@ -13,15 +13,7 @@ export const UpdatingBorder: React.FC = ({ children }) => {
     }
   })
   return (
-    <div
-      ref={ref}
-      style={{
-        borderStyle: 'solid',
-        margin: '1rem',
-        padding: '1rem',
-        borderRadius: '5px',
-      }}
-    >
+    <div ref={ref} className="border-2 rounded-md border-black p-4 my-2">
       {children}
     </div>
   )

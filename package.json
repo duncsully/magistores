@@ -1,5 +1,5 @@
 {
-  "name": "react-use-store",
+  "name": "magistores",
   "version": "0.1.0",
   "private": true,
   "dependencies": {
@@ -42,7 +42,12 @@
     ]
   },
   "devDependencies": {
+    "@types/use-sync-external-store": "0.0.3",
+    "autoprefixer": "^10.4.2",
     "eslint-config-prettier": "^8.3.0",
-    "prettier": "^2.4.1"
+    "postcss": "^8.4.5",
+    "prettier": "^2.4.1",
+    "tailwindcss": "^3.0.15",
+    "use-sync-external-store": "0.0.0-experimental-45898dacb2-20210828"
   }
 }
