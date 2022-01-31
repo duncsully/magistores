@@ -120,10 +120,8 @@ export const createStoreSubscriptionAdder = <T>(
   }
 
   /** Iterates through all tracked paths, checks for which ones changed, and calls any updateHandler tracking a changed path value */
-  const checkForUpdates = (
-    debugStatement = 'Manual call triggered check for updates'
-  ) => {
-    console.debug(debugStatement)
+  const checkForUpdates = () => {
+    console.debug('Checking for updates...')
     const updatedPaths = new Set<Path<T>>()
     Object.entries(previouslyReadValues).forEach(
       ([stringPath, previousValue]) => {
@@ -211,9 +209,10 @@ export const createStoreSubscriptionAdder = <T>(
           const prop = String(key)
           const path = (parentPath ? `${parentPath}.${prop}` : prop) as Path<T>
           if (store && onSet?.({ store, path, key, obj }) !== false) {
-            checkForUpdates(
+            console.debug(
               `Setter at path "${path}" triggered check for updates`
             )
+            checkForUpdates()
           }
           return true
         },
@@ -228,9 +227,10 @@ export const createStoreSubscriptionAdder = <T>(
             store &&
             onMethodCall?.({ store, path, key, obj: parent }) !== false
           ) {
-            checkForUpdates(
+            console.debug(
               `Method call at path "${path}" triggered check for updates`
             )
+            checkForUpdates()
           }
           return returnValue
         },
