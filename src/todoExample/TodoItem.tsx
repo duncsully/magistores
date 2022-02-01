@@ -20,10 +20,10 @@ export const TodoItem: React.FC<{ item: ITodoItem }> = ({ item }) => {
   const [editing, setEditing] = useState(false)
 
   const [localValue, setLocalValue] = useState(item.text)
-  const handleChange: ChangeEventHandler<HTMLInputElement> = (e) => {
+  const handleChange: ChangeEventHandler<HTMLInputElement> = e => {
     setLocalValue(e.target.value)
   }
-  const handleKeyDown: KeyboardEventHandler = (e) => {
+  const handleKeyDown: KeyboardEventHandler = e => {
     if (e.key === 'Enter') {
       editItem(item, localValue)
       setEditing(false)
@@ -34,7 +34,7 @@ export const TodoItem: React.FC<{ item: ITodoItem }> = ({ item }) => {
     setEditing(false)
   }
   return (
-    <li style={{ textDecoration: item.completed ? 'line-through' : '' }}>
+    <li>
       <UpdatingBorder>
         <input
           type="checkbox"
@@ -61,7 +61,14 @@ export const TodoItem: React.FC<{ item: ITodoItem }> = ({ item }) => {
             </button>
           </span>
         ) : (
-          <span onClick={() => setEditing(true)}>{item.text}</span>
+          <span
+            className={`text-gray-300 decoration-gray-300 ${
+              item.completed ? 'line-through' : ''
+            }`}
+            onClick={() => setEditing(true)}
+          >
+            {item.text}
+          </span>
         )}
       </UpdatingBorder>
     </li>

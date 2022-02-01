@@ -10,9 +10,9 @@ export const TodoList = () => {
 
   return (
     <UpdatingBorder>
-      TODO:
+      <span className="text-gray-300">TODO:</span>
       <ul>
-        {todoList.map((item) => (
+        {todoList.map(item => (
           <TodoItem item={item} key={item.added.valueOf()} />
         ))}
         <NewItem />

@@ -9,9 +9,9 @@ export const DoneList = () => {
 
   return (
     <UpdatingBorder>
-      Done:
+      <span className="text-gray-300">Done:</span>
       <ul>
-        {doneList.map((item) => (
+        {doneList.map(item => (
           <TodoItem item={item} key={item.added.valueOf()} />
         ))}
       </ul>
