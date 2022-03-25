@@ -94,7 +94,7 @@ export default createStoreSubscriptionAdder(() => new MyStore())
 
 ## Manually check for updates
 
-Usually all updates will be automatically checked for you on setter and method calls. However, especially for asynchronous actions, you might need to manually trigger an update check. For debugging purposes, you can optionally pass a message to the update checking function to log to the console.
+Usually all updates will be automatically checked for you on setter and method calls. However, especially for asynchronous actions, you might need to manually trigger an update check.
 
 ```typescript
 export default createStoreSubscriptionAdder(checkForUpdates => {
